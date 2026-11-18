@@ -75,7 +75,7 @@ py -3.11 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m pip install --no-deps pyorbbecsdk2==2.1.2
 mkdir models, data
-curl.exe -L -o models\hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+curl.exe -L -o models\hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
 ```
 카메라가 잡히지 않으면 Orbbec `pyorbbecsdk` 문서의 윈도우 설정(메타데이터 등록)을 참고하세요.
 
