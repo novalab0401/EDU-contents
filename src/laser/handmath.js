@@ -6,7 +6,7 @@
 export const PALM = [0, 5, 9, 13, 17];                       // 손바닥 중심 = 손목 + 손가락 뿌리 평균
 export const FINGERS = [[5, 8], [9, 12], [13, 16], [17, 20]]; // 검지~새끼 (뿌리, 끝)
 export const WRIST = 0, MIDDLE_MCP = 9;
-export const GRAB_CLOSE = 1.20, GRAB_OPEN = 1.40, SWITCH_FRAMES = 2;
+export const GRAB_CLOSE = 1.20, GRAB_OPEN = 1.40, SWITCH_FRAMES = 3;
 export const NX_GAIN = 1.5, NY_GAIN = 1.5;                   // 카메라 화면의 가운데 ±(1/1.5)가 게임 화면 전체에 대응 (손이 화면 끝까지 안 가도 됨)
 export const DEPTH_REF = 0.7;                                // 웹캠은 깊이가 없어서 고정값 (m)
 export const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],

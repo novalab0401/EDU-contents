@@ -20,7 +20,25 @@ const BEAM_SPEED = 2600;                   // 레이저가 나아가는 속도 (
 const SHOT_HOLD = 0.6;                     // 레이저가 끝까지 간 뒤 잠깐 머무는 시간
 const BRIEF_SEC = 4.0, CLEAR_SEC = 1.8, CELEBRATE_SEC = 2.6, REVIEW_SEC = 7.0, CARD_IDLE_SEC = 25;
 const TUTORIAL_MAX_SEC = 90;               // 튜토리얼이 너무 길어지면 자동으로 넘어감
-const HAND_START_SEC = 1.0;                // 대기 화면에서 손이 이만큼 계속 보이면 시작
+const HAND_START_SEC = 1.0;                // 대기 화면에서 손(커서)이 난이도 카드 위에 이만큼 머물면 선택
+// 처음 화면의 난이도 카드 (캔버스 좌표). 마우스 클릭 · 손 커서로 1초 머무르기 · 숫자 키 2~5
+const MENU_Y = 448, MENU_W = 228, MENU_H = 122, MENU_GAP = 18, MENU_X0 = (1280 - (4 * 228 + 3 * 18)) / 2;
+const MENU = [
+  { key: '2', plan: [1, 2], name: '쉬움', sub: 'MISSION 02', desc: '타깃 2개', color: '#5dff9d' },
+  { key: '3', plan: [1, 3], name: '보통', sub: 'MISSION 03', desc: '타깃 3개', color: '#4cf0ff' },
+  { key: '4', plan: [1, 4], name: '어려움', sub: 'MISSION 04 · 추천', desc: '타깃 4개 · 거울 5개', color: '#ffd23f' },
+  { key: '5', plan: [1, 5], name: '마스터', sub: 'MISSION 05', desc: '타깃 5개 · 거울 7개', color: '#ff7ab6' },
+];
+const cardRect = (i) => ({ x: MENU_X0 + i * (MENU_W + MENU_GAP), y: MENU_Y, w: MENU_W, h: MENU_H });
+const LIVE_CHIP = { x: MENU_X0, y: 404, w: 330, h: 36 };
+const inRect = (p, r) => p && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+/** 위치 → 메뉴 칸 (0~3 = 난이도 카드, 4 = LIVE 토글, -1 = 없음) */
+function menuHit(p) {
+  if (!p) return -1;
+  for (let i = 0; i < MENU.length; i++) if (inRect(p, cardRect(i))) return i;
+  return inRect(p, LIVE_CHIP) ? 4 : -1;
+}
+const handCursor = (h) => ({ x: Math.max(0, Math.min(1280, 640 + h.nx * 640 * 0.85)), y: Math.max(0, Math.min(720, 360 - h.ny * 360 * 0.85)) });
 const LOST_BANNER_SEC = 1.2;
 const LIVE_HOLD = 0.5;                     // 라이브 모드: 모든 타깃을 한 빔으로 이만큼 계속 맞히면 클리어
 const DEFAULT_PLAN = [1, 4];               // 기본(Enter·손으로 시작): 튜토리얼 → MISSION 04. 3·5 키로 다른 난이도
@@ -34,7 +52,7 @@ const sfx = new Sfx();
 
 const G = {
   state: 'title', t: 0, clock: 0, plan: DEFAULT_PLAN, planIdx: 0, live: false,
-  handHold: 0, needClear: false, board: [], boardDate: '', demo: null, lostT: 0, cardIdle: 0, camOn: false, server: { ok: null },
+  handHold: 0, needClear: false, liveSel: false, hover: -1, mouseHover: -1, cursor: null, dwell: 0, dwellOn: -1, board: [], boardDate: '', demo: null, lostT: 0, cardIdle: 0, camOn: false, server: { ok: null },
 };
 let R = null;                              // 지금 하는 미션
 const clock = () => G.clock;
@@ -45,7 +63,8 @@ G.cam = { state: BROWSER_HAND ? 'loading' : 'idle', msg: BROWSER_HAND ? '카메�
 if (BROWSER_HAND) {
   webhand = new WebHand({ onData: (s) => input.onData(s), onStatus: (st) => { G.cam = st; } });
   // 브라우저 카메라가 안 되면(권한·카메라 없음·http 주소) 파이썬 서버의 손 인식(/hand)을 시도 — 젯슨·오르벡 구성
-  webhand.start().catch(() => { try { input._connect(); } catch { /* 마우스·키보드로 진행 */ } });
+  webhand.start().then(() => { if (!G.camOn) G.camOn = webhand.togglePreview(); })      // 손 인식 화면은 기본으로 켜 둠 (V 로 끄기)
+    .catch(() => { try { input._connect(); } catch { /* 마우스·키보드로 진행 */ } });
 }
 
 // ───────────────────────── 기록(이벤트 로그) ─────────────────────────
@@ -144,8 +163,8 @@ function beginMission(id) {
 }
 
 function toTitle() {
-  G.state = 'title'; G.t = 0; G.handHold = 0; R = null;
-  G.needClear = input.handsVisible > 0;        // 이전 사람이 아직 손을 들고 있으면, 손이 한 번 사라진 뒤에 시작 (저절로 다시 시작되는 것 방지)
+  G.state = 'title'; G.t = 0; G.handHold = 0; R = null; G.dwell = 0; G.dwellOn = -1;
+  G.needClear = input.handsVisible > 0;        // 이전 사람이 아직 손을 들고 있으면, 손이 카드 밖으로 나간 뒤에 선택 (저절로 다시 시작되는 것 방지)
   hideCard(); resetDemo(); refreshBoard();
 }
 
@@ -365,6 +384,23 @@ function updateLive(dt) {
   if (R.liveHold >= LIVE_HOLD) endMission(true, 'clear');
 }
 
+/** 처음 화면: 손 커서가 카드 위에 HAND_START_SEC 동안 머물면 선택. LIVE 칩은 토글 */
+function updateMenu(dt) {
+  const hs = input.info && Array.isArray(input.info.hands) && input.available ? input.info.hands : [];
+  G.cursor = hs.length ? handCursor(hs[0]) : null;
+  G.hover = menuHit(G.cursor);
+  if (G.needClear && G.hover < 0) G.needClear = false;
+  if (G.hover >= 0 && !G.needClear) {
+    G.dwell = G.hover === G.dwellOn ? G.dwell + dt : 0;
+    G.dwellOn = G.hover;
+    if (G.dwell >= HAND_START_SEC) {
+      G.dwell = 0;
+      if (G.hover === 4) { G.liveSel = !G.liveSel; G.needClear = true; sfx.tick(); }       // 토글 뒤에는 손이 칩 밖으로 나가야 다시 눌림
+      else start(MENU[G.hover].plan, { live: G.liveSel });
+    }
+  } else { G.dwell = 0; G.dwellOn = -1; }
+}
+
 function step(dt, draw = true) {
   G.clock += dt; G.t += dt;
   switch (G.state) {
@@ -372,9 +408,7 @@ function step(dt, draw = true) {
       input.update();
       if (!G.demo) resetDemo();
       updateDemo(dt);
-      if (input.handsVisible === 0) G.needClear = false;
-      G.handHold = input.handsVisible > 0 && !G.needClear ? G.handHold + dt : 0;
-      if (G.handHold >= HAND_START_SEC) start();
+      updateMenu(dt);
       break;
     }
     case 'tutorial': {
@@ -472,17 +506,37 @@ function renderTitle() {
   panel(ctx, 240, 6, 800, 94, { fill: 'rgba(5,9,20,0.8)' });
   txt(ctx, 'LASER CHALLENGE', W / 2, 40, { size: 54, color: '#ffffff', glow: CYAN, weight: '900' });
   txt(ctx, '내 손이 거울이 된다 — 레이저를 순서대로 맞혀라!', W / 2, 80, { size: 22, color: CYAN });
-  // 안내
+  // 난이도 카드
   const pulse = 0.6 + Math.sin(G.clock * 4) * 0.4;
   const hand = input.available;
+  const hov = G.hover >= 0 ? G.hover : G.mouseHover;
+  const chip = LIVE_CHIP;
+  ctx.save(); const bg = ctx.createLinearGradient(0, 392, 0, 590); bg.addColorStop(0, 'rgba(5,9,20,0)'); bg.addColorStop(0.18, 'rgba(5,9,20,0.88)'); bg.addColorStop(1, 'rgba(5,9,20,0.88)'); ctx.fillStyle = bg; ctx.fillRect(130, 392, 1020, 198); ctx.restore();   // 데모가 카드와 겹쳐 보이지 않게
+  panel(ctx, chip.x, chip.y, chip.w, chip.h, { fill: G.liveSel ? 'rgba(255,90,120,0.3)' : 'rgba(5,9,20,0.8)', stroke: hov === 4 ? '#ffffff' : G.liveSel ? '#ff5a78' : 'rgba(76,240,255,0.35)', r: 18 });
+  txt(ctx, G.liveSel ? '● LIVE 모드 켜짐 (L)' : '○ LIVE 모드 꺼짐 (L) — 빔이 항상 켜진 상태로 도전', chip.x + chip.w / 2, chip.y + chip.h / 2, { size: 16, color: G.liveSel ? '#ffb3c0' : '#9fb4d8', weight: '600' });
+  MENU.forEach((m, i) => {
+    const r = cardRect(i), on = hov === i;
+    panel(ctx, r.x, r.y, r.w, r.h, { fill: on ? 'rgba(20,34,66,0.95)' : 'rgba(5,9,20,0.85)', stroke: on ? m.color : 'rgba(76,240,255,0.3)', r: 18 });
+    txt(ctx, m.name, r.x + r.w / 2, r.y + 36, { size: 36, color: m.color, glow: on ? m.color : null });
+    txt(ctx, m.desc, r.x + r.w / 2, r.y + 72, { size: 18, color: '#e8f6ff', weight: '600' });
+    txt(ctx, `${m.sub}  ·  키 ${m.key}`, r.x + r.w / 2, r.y + 98, { size: 14, color: '#7f93b8', weight: '500' });
+    if (G.hover === i && G.dwell > 0) {                          // 손으로 고르는 중: 아래쪽 진행 막대
+      ctx.save(); ctx.fillStyle = m.color; ctx.fillRect(r.x + 14, r.y + r.h - 9, (r.w - 28) * Math.min(1, G.dwell / HAND_START_SEC), 5); ctx.restore();
+    }
+  });
   panel(ctx, 330, 596, 620, 88, { fill: 'rgba(5,9,20,0.85)', stroke: `rgba(93,255,157,${0.3 + pulse * 0.5})` });
-  txt(ctx, hand ? '✋ 카메라 앞에 손을 들어 보세요' : '▶ Enter 키를 눌러 시작', W / 2, 628, { size: 34, color: '#5dff9d', alpha: 0.6 + pulse * 0.4 });
-  txt(ctx, hand ? (G.handHold > 0 ? `시작하는 중… ${Math.round(Math.min(1, G.handHold / HAND_START_SEC) * 100)}%` : '손가락 방향이 거울 방향 · 주먹을 쥐면 발사') : '(손 인식이 꺼져 있어요: 마우스 휠·←→ 로 각도, 클릭·Space 로 발사)', W / 2, 664, { size: 19, color: '#9fb4d8', weight: '500' });
+  txt(ctx, hand ? '✋ 손으로 난이도 카드를 1초 동안 가리키세요' : '난이도를 클릭하거나 2·3·4·5 키 (Enter = 추천)', W / 2, 628, { size: hand ? 30 : 28, color: '#5dff9d', alpha: 0.6 + pulse * 0.4 });
+  txt(ctx, hand ? '시작하면: 손가락 방향 = 거울 방향 · 주먹 = 발사 · 손을 내려도 각도는 유지' : '(손 인식이 꺼져 있어요: 마우스 휠·←→ 로 각도, 클릭·Space 로 발사)', W / 2, 664, { size: 19, color: '#9fb4d8', weight: '500' });
+  if (G.cursor) {                                              // 손 커서
+    ctx.save(); ctx.strokeStyle = '#5dff9d'; ctx.lineWidth = 4; ctx.shadowColor = '#5dff9d'; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.arc(G.cursor.x, G.cursor.y, 20, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(93,255,157,0.35)'; ctx.beginPath(); ctx.arc(G.cursor.x, G.cursor.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
   // 카메라 상태 (왼쪽 아래 작게): 준비 중 / 연결됨 / 오류 이유
   if (BROWSER_HAND && G.cam) {
     const cs = G.cam, ok = cs.state === 'ok', viaServer = cs.state === 'error' && input.available;   // 브라우저 카메라가 안 돼도 서버 손 인식이 되면 그걸로
-    const label = viaServer ? `📷 서버 카메라로 연결됨 · 손 ${input.handsVisible}개` : ok ? `📷 카메라 연결됨 · 손 ${input.handsVisible}개${cs.fps ? ` · ${cs.fps}fps` : ''}   (V: 손 인식 화면)` : `📷 ${cs.msg || '카메라 준비 중…'}${cs.state === 'error' ? '  → 마우스·키보드로 할 수 있어요' : ''}`;
-    txt(ctx, label, 24, 704, { size: 17, align: 'left', color: ok || viaServer ? '#5dff9d' : cs.state === 'error' ? '#ff9bb0' : '#9fb4d8', weight: '500' });
+    const label = viaServer ? `📷 서버 카메라로 연결됨 · 손 ${input.handsVisible}개` : ok ? `📷 카메라 연결됨 · 손 ${input.handsVisible}개${cs.fps ? ` · ${cs.fps}fps` : ''}   (V: 손 인식 화면 켜기/끄기)` : `📷 ${cs.msg || '카메라 준비 중…'}${cs.state === 'error' ? '  → 마우스·키보드로 할 수 있어요' : ''}`;
+    txt(ctx, label, 316, 704, { size: 17, align: 'left', color: ok || viaServer ? '#5dff9d' : cs.state === 'error' ? '#ff9bb0' : '#9fb4d8', weight: '500' });
   }
   // 오늘의 챔피언 (오른쪽 빈 공간)
   panel(ctx, 1010, 130, 256, 290, { fill: 'rgba(5,9,20,0.8)' });
@@ -525,7 +579,8 @@ function drawHud() {
 function drawRunScene({ showPreview = true } = {}) {
   const lv = R.level, sc = R.scene;
   if (R.lastTrace) drawPath(ctx, R.lastTrace.tr.segments, { alpha: Math.max(0, 1 - R.lastTrace.age / 1.4) * 0.55, width: 6 });
-  drawArena(sc, { progress: R.progress, flash: R.flash, wrong: R.wrong, t: G.clock, tracked: (id) => !!(input.slots[id] && input.slots[id].tracked), active: input.active, showActive: !input.handActive && input.ids.length > 1 });
+  const singleHand = input.handActive && input.handsVisible === 1 && input.ids.length > 1 && !!input.lastFed;   // 한 손으로 두 거울을 번갈아 조종 중: 지금 조종 중인 거울 강조
+  drawArena(sc, { progress: R.progress, flash: R.flash, wrong: R.wrong, t: G.clock, tracked: (id) => !!(input.slots[id] && input.slots[id].tracked), active: singleHand ? input.lastFed : input.active, showActive: singleHand || (!input.handActive && input.ids.length > 1) });
   const aiming = !R.fire && !R.ended;
   if (R.live && showPreview && (aiming || R.cleared)) {
     // 라이브: 레이저가 항상 켜져 있고, 각도를 바꾸면 경로가 바로 따라옴
@@ -598,7 +653,7 @@ function renderBrief() {
   txt(ctx, lv.title, W / 2, 262, { size: 38, color: CYAN });
   const rules = [`제한시간 ${lv.timeLimit}초`, R.live ? '레이저 상시 ON · 한 줄기 빔으로!' : `발사 ${lv.maxShots}번`, lv.targetsText || '빨강 → 노랑 → 파랑 순서대로'];
   rules.forEach((r, i) => txt(ctx, r, W / 2, 335 + i * 44, { size: 28, color: '#e8f6ff', weight: '600' }));
-  txt(ctx, input.available ? '두 손을 들어 거울을 준비하세요 ✋✋' : '마우스·키보드로 준비하세요', W / 2, 490, { size: 26, color: '#5dff9d' });
+  txt(ctx, input.available ? '손을 들어 거울을 준비하세요 ✋  (한 손으로 번갈아 맞춰도 돼요)' : '마우스·키보드로 준비하세요', W / 2, 490, { size: 26, color: '#5dff9d' });
   if (sec >= 1 && sec <= 3) {
     const n = 4 - sec, f = G.t - sec;
     txt(ctx, String(n), W / 2, 590, { size: 130 - f * 30, color: '#ffd23f', glow: '#ffd23f', weight: '900', alpha: 1 - f * 0.5 });
@@ -660,15 +715,15 @@ window.addEventListener('keydown', (e) => {
   }
   switch (e.code) {
     case 'Enter':
-      if (G.state === 'title') start();
+      if (G.state === 'title') start(DEFAULT_PLAN, { live: G.liveSel });
       else if (G.state === 'card') toTitle();
       else if (G.state === 'review') enterCard();
       break;
-    case 'Digit2': if (G.state === 'title') start([1, 2]); break;       // 쉬운 모드: 튜토리얼 → MISSION 02
-    case 'Digit3': if (G.state === 'title') start([1, 3]); break;       // 보통: MISSION 03 (타깃 3개)
-    case 'Digit4': if (G.state === 'title') start([1, 4]); break;       // 기본: MISSION 04 (타깃 4개)
-    case 'Digit5': if (G.state === 'title') start([1, 5]); break;       // 어려움: MISSION 05 (타깃 5개, 거울 7개)
-    case 'KeyL': if (G.state === 'title') start(DEFAULT_PLAN, { live: true }); break;   // 라이브 모드: 레이저 상시 ON, 한 줄기 빔으로 모든 타깃
+    case 'Digit2': if (G.state === 'title') start([1, 2], { live: G.liveSel }); break;       // 쉬운 모드: 튜토리얼 → MISSION 02
+    case 'Digit3': if (G.state === 'title') start([1, 3], { live: G.liveSel }); break;       // 보통: MISSION 03 (타깃 3개)
+    case 'Digit4': if (G.state === 'title') start([1, 4], { live: G.liveSel }); break;       // 기본: MISSION 04 (타깃 4개)
+    case 'Digit5': if (G.state === 'title') start([1, 5], { live: G.liveSel }); break;       // 어려움: MISSION 05 (타깃 5개, 거울 7개)
+    case 'KeyL': if (G.state === 'title') G.liveSel = !G.liveSel; break;   // 라이브 모드 켜기/끄기: 레이저 상시 ON, 한 줄기 빔으로 모든 타깃
     case 'KeyN':                                                         // 건너뛰기
       if (G.state === 'tutorial' && R && !R.ended) endMission(true, 'skip');
       else if (G.state === 'brief') G.t = BRIEF_SEC;
@@ -681,7 +736,15 @@ window.addEventListener('keydown', (e) => {
     default: break;
   }
 });
-canvas.addEventListener('pointerdown', () => { sfx.unlock(); if (G.state === 'title') start(); });
+const toLogical = (e) => { const s = Math.min(innerWidth / W, innerHeight / H); return { x: (e.clientX - (innerWidth - W * s) / 2) / s, y: (e.clientY - (innerHeight - H * s) / 2) / s }; };
+canvas.addEventListener('pointermove', (e) => { G.mouseHover = G.state === 'title' ? menuHit(toLogical(e)) : -1; });
+canvas.addEventListener('pointerdown', (e) => {
+  sfx.unlock();
+  if (G.state !== 'title') return;
+  const hit = menuHit(toLogical(e));
+  if (hit === 4) G.liveSel = !G.liveSel;
+  else if (hit >= 0) start(MENU[hit].plan, { live: G.liveSel });
+});
 $('r-save').addEventListener('click', saveName);
 $('result').addEventListener('click', (e) => { if (e.target.id === 'result') toTitle(); });
 $('r-again').addEventListener('click', toTitle);
@@ -702,6 +765,8 @@ window.laser = {
   G, input, sfx, LEVELS, SNAP,
   get R() { return R; },
   step, start, toTitle, fireNow, saveName, enterCard, LIVE_HOLD,
+  /** 처음 화면 메뉴 칸 i(0~3 카드, 4 LIVE 칩)의 한가운데를 가리키는 손 위치 (테스트용) */
+  menuHand(i) { const r = i === 4 ? LIVE_CHIP : cardRect(i); return { nx: (r.x + r.w / 2 - 640) / 544, ny: (360 - (r.y + r.h / 2)) / 306 }; },
   advance(sec, dt = 1 / 30) { const n = Math.max(1, Math.round(sec / dt)); for (let i = 0; i < n; i++) step(dt, i === n - 1); },
   setAngles(a) { for (const [id, v] of Object.entries(a)) { input.slots[id].angle = v; input.slots[id].raw = v; } syncMirrors(); },
   hands(list) { input.onData({ available: true, visible: list.length > 0, hands: list }); },

@@ -10,13 +10,14 @@ import { lineDiff, norm180, deg } from './optics.js';
 
 const LOST_MS = 600;          // 손을 이만큼 못 보면 tracked=false (각도는 유지)
 const STALE_MS = 1500;        // 서버 소식이 이만큼 없으면 손 인식 끊김
-const ANGLE_TAU = 0.07;       // 각도 평활 시간상수 (초)
-const HYST = 1.2;             // 스냅 경계에서 이만큼(°) 더 넘어야 바뀜
+const ANGLE_TAU = 0.16;       // 각도 평활 시간상수 (초) — 클수록 둔감하고 부드러움
+const HYST = 2.4;             // 스냅 경계에서 이만큼(°) 더 넘어야 바뀜 (손 떨림 무시)
+const OPEN_BEFORE_FIRE = 0.25; // 주먹으로 쏘려면 직전에 손이 이만큼(초) 펴져 있어야 함 (인식 깜빡임·실수 발사 방지)
 const FREEZE_BACK = 0.30;     // 주먹 쥘 때 이 시간(초) 전 각도로 되돌림
 const FIRE_COOLDOWN = 0.7;    // 연속 발사 방지 (초)
-const SIDE_NX = 0.12;         // 손 하나일 때 좌/우 구분 경계 (가운데 ±이 안은 직전 선택 유지)
+const SIDE_NX = 0.3;          // 손 하나일 때 좌/우 구분 경계 (가운데 ±이 안은 직전 선택 유지)
 
-const mkSlot = () => ({ angle: 90, raw: 90, tracked: false, hasEver: false, fist: false, lastSeen: -1e9, filt: null, hist: [], frozen: false });
+const mkSlot = () => ({ angle: 90, raw: 90, tracked: false, hasEver: false, fist: false, lastSeen: -1e9, filt: null, hist: [], frozen: false, openT: 0, lastFeed: -1e9 });
 
 export class LaserInput {
   /** clock: () => 초 (테스트에서는 가상 시간) */
@@ -31,6 +32,7 @@ export class LaserInput {
     this.lastMsg = -1e9;
     this.lastFire = -1e9;
     this.lastSingle = null;
+    this.lastFed = null;               // 마지막으로 손이 조종한 거울 (화면에 강조)
     this.source = 'mouse';             // 'hand' | 'mouse'
     this.handSeenAt = -1e9;
     if (useHand && typeof EventSource !== 'undefined') this._connect();
@@ -50,7 +52,7 @@ export class LaserInput {
       Object.assign(this.slots[id], mkSlot(), { angle: m ? m.angle : 90, raw: m ? m.angle : 90 });
     }
     this.active = this.ids[0];
-    this.lastSingle = null;
+    this.lastSingle = null; this.lastFed = null;
   }
 
   get available() { return !!this.info.available && (this.clock() - this.lastMsg) * 1000 < STALE_MS; }
@@ -86,6 +88,10 @@ export class LaserInput {
   _feed(id, h, t) {
     const sl = this.slots[id];
     sl.tracked = true; sl.hasEver = true; sl.lastSeen = t;
+    this.lastFed = id;
+    const dt = sl.lastFeed < -1e8 ? 0 : Math.min(0.2, Math.max(0, t - sl.lastFeed)); sl.lastFeed = t;
+    const armed = sl.openT >= OPEN_BEFORE_FIRE;               // 쥐기 직전까지 손이 충분히 펴져 있었나
+    sl.openT = h.fist ? 0 : sl.openT + dt;
     // 쥠: 새로 쥐는 순간 → 쥐기 직전 각도로 고정 + 발사
     const wasFist = sl.fist;
     sl.fist = !!h.fist;
@@ -95,7 +101,7 @@ export class LaserInput {
       sl.raw = pick.raw;
       sl.angle = snapAngle(pick.raw);
       sl.frozen = true;
-      this._fire(id, 'fist');
+      if (armed) this._fire(id, 'fist');
     }
     if (!sl.fist) sl.frozen = false;
     if (sl.frozen || typeof h.ang !== 'number') return;
@@ -125,7 +131,7 @@ export class LaserInput {
     const t = this.clock();
     for (const id of ['H1', 'H2']) {
       const sl = this.slots[id];
-      if (sl.tracked && (t - sl.lastSeen) * 1000 > LOST_MS) { sl.tracked = false; sl.fist = false; sl.frozen = false; sl.filt = null; sl.hist = []; }
+      if (sl.tracked && (t - sl.lastSeen) * 1000 > LOST_MS) { sl.tracked = false; sl.fist = false; sl.frozen = false; sl.filt = null; sl.hist = []; sl.openT = 0; sl.lastFeed = -1e9; }
     }
     if (!this.handActive) this.source = 'mouse';
   }

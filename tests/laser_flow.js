@@ -36,25 +36,41 @@ async function main() {
   ok(maxP === 3, '데모가 스스로 풀어서 세 타깃을 순서대로 맞힘', 'max=' + maxP);
   ok(L.sfx.log.length === 0, '대기 화면 데모에서는 소리가 나지 않음');
 
-  say('2. 손으로 시작 (손이 1초 이상 보이면)');
-  feed(0.6, [open(0, 90)]);
-  ok(L.G.state === 'title', '0.6초는 아직 대기');
-  feed(0.6, [open(0, 90)]);
-  ok(L.G.state === 'tutorial', '1초 넘게 손이 보이면 튜토리얼 시작', L.G.state);
+  say('2. 손으로 난이도 고르기 (카드 위에 1초 머무르기) — 손만 보인다고 저절로 시작하지 않음');
+  const onCard = (i) => ({ ...open(0, 90), ...L.menuHand(i) });
+  feed(3.0, [open(0, 90)]);
+  ok(L.G.state === 'title', '손이 3초 동안 보여도 카드 밖이면 계속 대기 (자동 시작 없음)', L.G.state);
+  feed(0.6, [onCard(2)]);
+  ok(L.G.state === 'title' && L.G.hover === 2, '카드 위 0.6초: 아직 선택 중', L.G.state);
+  feed(0.6, [onCard(2)]);
+  ok(L.G.state === 'tutorial' && L.G.plan.join() === '1,4', '카드(어려움) 위 1초 → 튜토리얼 → MISSION 04', L.G.state + ' ' + L.G.plan);
   ok(L.R.level.id === 1 && L.R.scene.mirrors.length === 1, 'MISSION 01 (거울 1개)');
+  key('Escape');
+  feed(0.3, []);
+  feed(1.2, [onCard(0)]);
+  ok(L.G.state === 'tutorial' && L.G.plan.join() === '1,2', '쉬움 카드 → 튜토리얼 → MISSION 02', L.G.plan + '');
+  key('Escape');
+  feed(0.3, []);
+  feed(1.2, [onCard(4)]);
+  ok(L.G.state === 'title' && L.G.liveSel === true, 'LIVE 칩 위 1초 → LIVE 모드 켜짐 (시작은 안 함)', L.G.state + ' ' + L.G.liveSel);
+  feed(1.5, [onCard(4)]);
+  ok(L.G.liveSel === true, '칩 위에 계속 있어도 다시 토글되지 않음');
+  feed(0.3, [open(0, 90)]); feed(1.2, [onCard(4)]);
+  ok(L.G.liveSel === false, '손이 나갔다 다시 들어오면 토글(꺼짐)');
+  feed(0.3, []);
 
-  say('2b. 처음 화면으로 돌아왔을 때 이전 사람이 손을 들고 있으면 바로 시작하지 않음');
+  say('2b. 처음 화면으로 돌아왔을 때 이전 사람이 같은 카드 위에 손을 들고 있으면 바로 시작하지 않음');
+  feed(1.2, [onCard(2)]);
+  ok(L.G.state === 'tutorial', '카드 선택으로 시작', L.G.state);
   key('Escape');
-  feed(0.5, [open(0, 90)]);                      // 손이 계속 보이는 채로 처음 화면으로
-  key('Escape');
-  feed(1.5, [open(0, 90)]);
-  ok(L.G.state === 'title', '손이 계속 보이는 동안은 대기', L.G.state);
-  feed(0.3, []);                                 // 손이 한 번 사라지면
-  feed(1.2, [open(0, 90)]);
-  ok(L.G.state === 'tutorial', '손이 사라졌다가 다시 보이면 시작', L.G.state);
+  feed(1.5, [onCard(2)]);                          // 손이 같은 카드 위에 계속 있음
+  ok(L.G.state === 'title', '손이 카드 위에 계속 있는 동안은 대기', L.G.state);
+  feed(0.3, [open(0, 90)]);                        // 카드 밖으로 한 번 나가면
+  feed(1.2, [onCard(2)]);
+  ok(L.G.state === 'tutorial', '카드 밖으로 나갔다 다시 들어오면 시작', L.G.state);
 
   say('3. 튜토리얼: 손 기울기 → 거울, 주먹 → 발사');
-  feed(0.6, [open(0, 25)]);
+  feed(1.2, [open(0, 25)]);
   ok(L.input.slots.H1.angle === 25 && L.R.scene.mirrors[0].angle === 25, '손 기울기 25° → 거울 25°', String(L.input.slots.H1.angle));
   ok(L.R.tr.hits.length > 0, '점선 미리보기가 타깃을 지나감');
   ok(events('MIRROR_SELECTED').length === 1, 'MIRROR_SELECTED 기록');
@@ -188,8 +204,8 @@ async function main() {
   key('Escape');
 
   say('12. 라이브 모드 (L 키): 레이저 상시 ON, 한 빔으로 모든 타깃');
-  key('KeyL');
-  ok(L.G.state === 'tutorial' && L.G.live && L.R.live && L.R.level.id === 1, 'L 키: 라이브 모드 튜토리얼');
+  key('KeyL'); key('Enter');
+  ok(L.G.state === 'tutorial' && L.G.live && L.R.live && L.R.level.id === 1, 'L 키로 켜고 Enter: 라이브 모드 튜토리얼');
   ok(events('MISSION_START')[0].mode === 'live', 'MISSION_START 기록에 mode=live');
   L.setAngles({ H1: 25 });
   L.advance(0.3);
@@ -232,14 +248,15 @@ async function main() {
   ok(L.G.state === 'title' && document.getElementById('result').classList.contains('hidden'), '처음 화면 (결과 카드 닫힘)');
 
   say('12b. 라이브 모드 실패 → 처음부터 계산한 처방');
-  key('KeyL'); key('KeyN'); L.advance(CLEAR + 0.3); L.advance(4.2);
+  key('Enter'); key('KeyN'); L.advance(CLEAR + 0.3); L.advance(4.2);
   L.setAngles({ H1: 155, H2: 125 });
   L.advance(61);
   ok(L.G.state === 'review' && L.R.endReason === 'time' && L.R.live, '라이브도 60초가 지나면 실패', JSON.stringify(L.snapshot()));
   ok(/왼손 거울: 시계 방향으로 5° 더/.test(L.R.diagText) && !/오른손/.test(L.R.diagText), '처방은 발사 모드와 같은 방식 (왼손 150°로)', L.R.diagText);
   key('Escape');
-  key('Enter');
-  ok(L.G.state === 'tutorial' && !L.G.live, 'Enter로 시작하면 다시 일반(발사) 모드');
+  ok(L.G.liveSel === true, 'LIVE 선택은 처음 화면으로 돌아와도 유지');
+  key('KeyL'); key('Enter');
+  ok(L.G.state === 'tutorial' && !L.G.live, 'L 키로 끄고 Enter: 다시 일반(발사) 모드');
   key('Escape');
 
   say('13. 어려운 레벨 (MISSION 04·05) · 난이도 키');
@@ -264,7 +281,7 @@ async function main() {
   key('Enter');
   ok(L.G.plan.join() === '1,4', 'Enter: 기본은 MISSION 04');
   key('Escape');
-  key('KeyL'); key('KeyN'); L.advance(CLEAR + 0.3); L.advance(4.2);
+  key('KeyL'); key('Enter'); key('KeyN'); L.advance(CLEAR + 0.3); L.advance(4.2);
   L.setAngles({ H1: 150, H2: 125 }); L.advance(1.0);
   ok(L.G.state === 'celebrate' && L.R.live && L.R.progress === 4, '라이브 모드도 MISSION 04를 한 빔으로 클리어', JSON.stringify(L.snapshot()));
   key('Escape');

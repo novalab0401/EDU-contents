@@ -146,7 +146,7 @@ export class WebHand {
       const c = document.createElement('canvas');
       c.width = 480; c.height = 270;
       c.id = 'handcam';
-      c.style.cssText = 'position:fixed;left:12px;bottom:12px;width:360px;height:202px;z-index:20;border:2px solid #5dff9d;border-radius:10px;background:#000;box-shadow:0 0 24px rgba(93,255,157,.35);display:none';
+      c.style.cssText = 'position:fixed;left:12px;bottom:12px;width:288px;height:162px;z-index:20;border:2px solid #5dff9d;border-radius:10px;background:#000;box-shadow:0 0 24px rgba(93,255,157,.35);display:none';
       document.body.appendChild(c);
       this.preview = c;
     }

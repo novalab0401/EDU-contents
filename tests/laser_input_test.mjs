@@ -53,7 +53,7 @@ console.log('4. 손 배정');
   ok(b.inp.slots.H1.tracked && !b.inp.slots.H2.tracked && b.inp.slots.H1.angle === 40, '한 손이 왼쪽 → H1');
   run(b.inp, 0.5, () => [H(0.6, 100)]);
   ok(b.inp.slots.H2.tracked && b.inp.slots.H2.angle === 100 && b.inp.slots.H1.angle === 40, '같은 손이 오른쪽으로 → H2 조종, H1은 각도 유지', `${b.inp.slots.H1.angle}/${b.inp.slots.H2.angle}`);
-  run(b.inp, 0.5, () => [H(0.02, 70)]);
+  run(b.inp, 1.2, () => [H(0.02, 70)]);
   ok(b.inp.slots.H2.angle === 70, '가운데에서는 직전에 쓰던 거울(H2) 유지', b.inp.slots.H2.angle);
   const c = mk(0);
   run(c.inp, 0.5, () => [H(0.6, 30)]);
@@ -79,6 +79,26 @@ console.log('5. 주먹 → 발사 · 쥐기 직전 각도로 고정');
   const b = mk();
   run(b.inp, 0.5, () => [H(-0.5, 40, true), H(0.5, 135)]);
   ok(b.fires.length === 0, '처음부터 주먹인 손은 발사하지 않음');
+}
+console.log('5b. 실수 발사 방지: 손이 막 나타났거나 펴진 지 얼마 안 되면 주먹이어도 발사 안 함');
+{
+  const { inp, fires } = mk();
+  run(inp, 0.1, () => [H(-0.5, 40), H(0.5, 135)]);
+  run(inp, 0.3, () => [H(-0.5, 40, true), H(0.5, 135)]);
+  ok(fires.length === 0, '나타난 지 0.1초 만에 쥔 주먹은 발사 안 함', fires.length);
+  run(inp, 0.5, () => [H(-0.5, 40), H(0.5, 135)]);
+  run(inp, 0.1, () => [H(-0.5, 40, true), H(0.5, 135)]);
+  ok(fires.length === 1, '0.5초 펴 있다가 쥐면 발사', fires.length);
+}
+console.log('5c. 한 손으로 두 거울: 한 손을 왼쪽·오른쪽으로 옮겨 번갈아 조종');
+{
+  const { inp } = mk();
+  run(inp, 1.0, () => [H(-0.6, 40)]);
+  ok(inp.lastFed === 'H1', '왼쪽 손 → 조종 중 거울 H1', inp.lastFed);
+  run(inp, 1.0, () => [H(0.6, 100)]);
+  ok(inp.lastFed === 'H2' && inp.slots.H1.angle === 40, '오른쪽으로 옮기면 H2 조종, H1은 그대로', `${inp.lastFed} ${inp.slots.H1.angle}`);
+  run(inp, 1.0, () => [H(0.15, 80)]);
+  ok(inp.lastFed === 'H2', '가운데 근처(±0.3)에서는 직전 거울 유지', inp.lastFed);
 }
 console.log('6. 손 놓침 · 복귀 · 마우스/키보드');
 {

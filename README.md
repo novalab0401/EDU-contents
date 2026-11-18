@@ -16,7 +16,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements-lite.txt     # 맥·리눅스: .venv/bin/pip install -r requirements-lite.txt
 .venv\Scripts\python server.py --no-camera                       # 맥·리눅스: .venv/bin/python server.py --no-camera
 ```
-크롬에서 `http://localhost:8001/laser` → 카메라 허용. **Enter** = 기본(MISSION 04), **L** = 라이브 모드, **3·5** = 난이도, **V** = 손 인식 화면.
+크롬에서 `http://localhost:8001/laser` → 카메라 허용. 처음 화면의 **난이도 카드**를 클릭하거나 손으로 1초 가리키면 시작 (키 **2·3·4·5**, **Enter** = 추천 MISSION 04). **L** = 라이브 모드 켜기/끄기, **V** = 손 인식 화면 켜기/끄기(기본 켜짐).
 
 자세한 설치·운영자 키·현장 점검은 [docs/LASER_CHALLENGE.md](docs/LASER_CHALLENGE.md) 를 보세요.
 아래는 이 코드가 함께 쓰는 공통 서버·카메라 설명과, 같은 코드에 들어 있는 카오스 타워 설명입니다.

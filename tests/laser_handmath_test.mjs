@@ -45,15 +45,15 @@ const mkHand = (cx, cy, ratio, tiltDx = 0) => {
   ok(c.ang < 90 && c.ang > 40, '손가락을 내 오른쪽으로 기울이면 각도가 90°보다 작아짐', c.ang.toFixed(1));
 }
 
-console.log('3. 쥠 히스테리시스 (경계 1.20 / 1.40, 연속 2프레임)');
+console.log('3. 쥠 히스테리시스 (경계 1.20 / 1.40, 연속 3프레임)');
 {
   const ft = new FistTracker();
   const one = (open) => ft.update([{ open }])[0].fist;
   ok(!one(1.6) && !one(1.6) && !one(1.6), '편한 손은 쥠 아님');
-  ok(!one(1.0), '한 프레임만 작아져서는 아직 쥠 아님 (순간 오인식 무시)');
-  ok(one(1.0), '연속 2프레임 → 쥠');
+  ok(!one(1.0) && !one(1.0), '한두 프레임만 작아져서는 아직 쥠 아님 (순간 오인식 무시)');
+  ok(one(1.0), '연속 3프레임 → 쥠');
   ok(one(1.3) && one(1.3) && one(1.3), '1.2~1.4 사이에서는 쥠 유지');
-  ok(one(1.5) && !one(1.5), '1.4 넘게 2프레임 → 폄');
+  ok(one(1.5) && one(1.5) && !one(1.5), '1.4 넘게 3프레임 → 폄');
   ok(GRAB_CLOSE === 1.2 && GRAB_OPEN === 1.4, 'config.yaml 의 grab_close/grab_open 과 같은 값');
   ft.reset();
   const two = ft.update([{ open: 1.0 }, { open: 1.7 }]);
