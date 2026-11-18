@@ -401,8 +401,12 @@ function updateMenu(dt) {
   } else { G.dwell = 0; G.dwellOn = -1; }
 }
 
+/** 상태별 배경음악: 대기·튜토리얼·카운트다운 = 잔잔, 본 게임 = 비트, 결과 화면 = 끔(효과음이 잘 들리게) */
+const BGM_BY_STATE = { title: 'calm', tutorial: 'calm', tutorial_clear: 'calm', brief: 'calm', play: 'play', celebrate: 'off', review: 'off', card: 'calm' };
+
 function step(dt, draw = true) {
   G.clock += dt; G.t += dt;
+  sfx.setBgm(BGM_BY_STATE[G.state] || 'off');
   switch (G.state) {
     case 'title': {
       input.update();
@@ -527,6 +531,8 @@ function renderTitle() {
   panel(ctx, 330, 596, 620, 88, { fill: 'rgba(5,9,20,0.85)', stroke: `rgba(93,255,157,${0.3 + pulse * 0.5})` });
   txt(ctx, hand ? '✋ 손으로 난이도 카드를 1초 동안 가리키세요' : '난이도를 클릭하거나 2·3·4·5 키 (Enter = 추천)', W / 2, 628, { size: hand ? 30 : 28, color: '#5dff9d', alpha: 0.6 + pulse * 0.4 });
   txt(ctx, hand ? '시작하면: 손가락 방향 = 거울 방향 · 주먹 = 발사 · 손을 내려도 각도는 유지' : '(손 인식이 꺼져 있어요: 마우스 휠·←→ 로 각도, 클릭·Space 로 발사)', W / 2, 664, { size: 19, color: '#9fb4d8', weight: '500' });
+  if (!sfx.running && !sfx.muted) txt(ctx, '🔇 소리가 안 나요 — 화면을 한 번 클릭하거나 아무 키나 누르세요', W - 24, 704, { size: 17, align: 'right', color: '#ffd23f', weight: '600', alpha: 0.6 + pulse * 0.4 });
+  if (sfx.muted) txt(ctx, '🔇 음소거 (M 키로 켜기)', W - 24, 704, { size: 17, align: 'right', color: '#9fb4d8', weight: '500' });
   if (G.cursor) {                                              // 손 커서
     ctx.save(); ctx.strokeStyle = '#5dff9d'; ctx.lineWidth = 4; ctx.shadowColor = '#5dff9d'; ctx.shadowBlur = 16;
     ctx.beginPath(); ctx.arc(G.cursor.x, G.cursor.y, 20, 0, Math.PI * 2); ctx.stroke();
@@ -737,6 +743,10 @@ window.addEventListener('keydown', (e) => {
   }
 });
 const toLogical = (e) => { const s = Math.min(innerWidth / W, innerHeight / H); return { x: (e.clientX - (innerWidth - W * s) / 2) / s, y: (e.clientY - (innerHeight - H * s) / 2) / s }; };
+// 소리: 브라우저는 클릭·키 입력 전에는 소리를 막으므로 첫 조작에서 켬 (손으로만 하면 안 켜질 수 있어서 처음 화면에 안내를 띄움)
+['pointerdown', 'touchstart', 'click'].forEach((ev) => window.addEventListener(ev, () => sfx.unlock(), { passive: true }));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sfx.unlock(); });
+sfx.unlock();
 canvas.addEventListener('pointermove', (e) => { G.mouseHover = G.state === 'title' ? menuHit(toLogical(e)) : -1; });
 canvas.addEventListener('pointerdown', (e) => {
   sfx.unlock();

@@ -90,6 +90,25 @@ console.log('5b. 실수 발사 방지: 손이 막 나타났거나 펴진 지 얼
   run(inp, 0.1, () => [H(-0.5, 40, true), H(0.5, 135)]);
   ok(fires.length === 1, '0.5초 펴 있다가 쥐면 발사', fires.length);
 }
+console.log('5b2. 쥐려고 손가락이 접히기 시작하면 각도 갱신 중단 · 주먹을 푼 직후에도 잠깐 유지');
+{
+  const { inp, fires } = mk();
+  run(inp, 1.0, () => [H(-0.5, 40), H(0.5, 135)]);
+  // 쥐는 동작: 0.4초 동안 손가락이 접히면서(open 1.9→1.3) 손목이 돌아가 각도가 40 → 80 으로 쏠림
+  const n = 12;
+  for (let i = 0; i < n; i++) {
+    T += 1 / 30;
+    const open = 1.9 - (0.6 * (i + 1)) / n;
+    inp.onData(msg([{ nx: -0.5, ny: 0, ang: 40 + (40 * (i + 1)) / n, fist: open < 1.2, open, d: 0.7 }, H(0.5, 135)]));
+  }
+  run(inp, 0.2, () => [H(-0.5, 80, true), H(0.5, 135)]);
+  ok(fires.length === 1 && inp.slots.H1.angle === 40, '쥐면서 손이 돌아가도 발사 각도는 40° 그대로', `${fires.length} / ${inp.slots.H1.angle}`);
+  // 푸는 중: 손이 펴지면서 흔들려 70°까지 돌아감 (0.3초)
+  run(inp, 0.3, () => [H(-0.5, 70), H(0.5, 135)]);
+  ok(inp.slots.H1.angle === 40, '주먹을 푼 직후 0.4초는 각도 유지 (펴면서 흔들려도 안 바뀜)', inp.slots.H1.angle);
+  run(inp, 1.2, () => [H(-0.5, 70), H(0.5, 135)]);
+  ok(inp.slots.H1.angle === 70, '이후에는 손을 따라 다시 움직임', inp.slots.H1.angle);
+}
 console.log('5c. 한 손으로 두 거울: 한 손을 왼쪽·오른쪽으로 옮겨 번갈아 조종');
 {
   const { inp } = mk();

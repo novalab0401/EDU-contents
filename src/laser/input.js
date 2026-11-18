@@ -13,11 +13,13 @@ const STALE_MS = 1500;        // 서버 소식이 이만큼 없으면 손 인식
 const ANGLE_TAU = 0.16;       // 각도 평활 시간상수 (초) — 클수록 둔감하고 부드러움
 const HYST = 2.4;             // 스냅 경계에서 이만큼(°) 더 넘어야 바뀜 (손 떨림 무시)
 const OPEN_BEFORE_FIRE = 0.25; // 주먹으로 쏘려면 직전에 손이 이만큼(초) 펴져 있어야 함 (인식 깜빡임·실수 발사 방지)
-const FREEZE_BACK = 0.30;     // 주먹 쥘 때 이 시간(초) 전 각도로 되돌림
+const FREEZE_BACK = 0.50;     // 주먹 쥘 때 이 시간(초) 전 각도로 되돌림 (쥐려고 손을 움직이기 시작한 시점보다 앞)
+const CLOSING_OPEN = 1.5;     // 손가락이 이만큼 접히기 시작하면(펴짐 비율이 이 아래) 각도 갱신을 멈춤 — 쥐려는 동작에 각도가 딸려 가지 않게
+const RELEASE_HOLD = 0.4;     // 주먹을 푼 뒤 이 시간(초) 동안은 각도 유지 (손을 펴면서 흔들리는 구간)
 const FIRE_COOLDOWN = 0.7;    // 연속 발사 방지 (초)
 const SIDE_NX = 0.3;          // 손 하나일 때 좌/우 구분 경계 (가운데 ±이 안은 직전 선택 유지)
 
-const mkSlot = () => ({ angle: 90, raw: 90, tracked: false, hasEver: false, fist: false, lastSeen: -1e9, filt: null, hist: [], frozen: false, openT: 0, lastFeed: -1e9 });
+const mkSlot = () => ({ angle: 90, raw: 90, tracked: false, hasEver: false, fist: false, lastSeen: -1e9, filt: null, hist: [], frozen: false, holdUntil: -1e9, openT: 0, lastFeed: -1e9 });
 
 export class LaserInput {
   /** clock: () => 초 (테스트에서는 가상 시간) */
@@ -104,7 +106,10 @@ export class LaserInput {
       if (armed) this._fire(id, 'fist');
     }
     if (!sl.fist) sl.frozen = false;
+    if (wasFist && !sl.fist) sl.holdUntil = t + RELEASE_HOLD;
     if (sl.frozen || typeof h.ang !== 'number') return;
+    if (t < sl.holdUntil) { sl.filt = null; return; }                                  // 주먹을 막 푼 뒤: 각도 유지
+    if (!sl.fist && typeof h.open === 'number' && h.open < CLOSING_OPEN) return;       // 쥐는 중: 각도 갱신 중단
     // 각도: 180° 주기라서 (cos2θ, sin2θ) 벡터로 평활
     const a2 = (h.ang * Math.PI) / 90;
     const c = Math.cos(a2), s = Math.sin(a2);
@@ -131,7 +136,7 @@ export class LaserInput {
     const t = this.clock();
     for (const id of ['H1', 'H2']) {
       const sl = this.slots[id];
-      if (sl.tracked && (t - sl.lastSeen) * 1000 > LOST_MS) { sl.tracked = false; sl.fist = false; sl.frozen = false; sl.filt = null; sl.hist = []; sl.openT = 0; sl.lastFeed = -1e9; }
+      if (sl.tracked && (t - sl.lastSeen) * 1000 > LOST_MS) { sl.tracked = false; sl.fist = false; sl.frozen = false; sl.filt = null; sl.hist = []; sl.openT = 0; sl.lastFeed = -1e9; sl.holdUntil = -1e9; }
     }
     if (!this.handActive) this.source = 'mouse';
   }

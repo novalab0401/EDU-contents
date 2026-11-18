@@ -36,6 +36,7 @@ async function main() {
   ok(maxP === 3, '데모가 스스로 풀어서 세 타깃을 순서대로 맞힘', 'max=' + maxP);
   ok(L.sfx.log.length === 0, '대기 화면 데모에서는 소리가 나지 않음');
 
+  ok(L.sfx.bgmMode === 'calm', '대기 화면 배경음악: 잔잔한 모드', L.sfx.bgmMode);
   say('2. 손으로 난이도 고르기 (카드 위에 1초 머무르기) — 손만 보인다고 저절로 시작하지 않음');
   const onCard = (i) => ({ ...open(0, 90), ...L.menuHand(i) });
   feed(3.0, [open(0, 90)]);
@@ -90,6 +91,7 @@ async function main() {
   ok(L.G.state === 'brief', '3초까지는 브리핑');
   L.advance(1.1);
   ok(L.G.state === 'play' && L.R.timeLeft > 44 && L.R.timeLeft <= 45 && L.R.level.maxShots === 5, '4초 뒤 시작: 45초 · 5발', JSON.stringify(L.snapshot()));
+  ok(L.sfx.bgmMode === 'play', '본 게임 중에는 배경음악이 비트 모드', L.sfx.bgmMode);
 
   say('5. 두 발로 클리어: 왼손만 맞게 → 두 번째 발에 오른손 수정');
   L.setAngles({ H1: 20, H2: 0 });
