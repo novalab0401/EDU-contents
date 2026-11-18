@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>RUNNING</title>
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three.module.js", "cannon-es": "/vendor/cannon-es.js" } }
+  </script>
+</head>
+<body>
+<pre id="out"></pre>
+<script type="module">
+// 물리 + 붕괴 분석기 시나리오 테스트 (화면 없이 빠르게 시뮬레이션). 헤드리스 크롬에서 --dump-dom 으로 결과를 읽음
+import * as THREE from 'three';
+import { Physics, FIXED_DT } from '/src/physics.js';
+import { Analyzer, describeReport } from '/src/analyzer.js';
+
+function run(name, duration, events) {
+  const ph = new Physics(new THREE.Scene());
+  const an = new Analyzer(ph);
+  const ctx = { ph, an, blocks: {} };
+  const place = (key, type, x, y, z = 0, yaw = 0) => {
+    const b = ph.createBlock(type);
+    b.body.position.set(x, y, z);
+    b.body.quaternion.setFromEuler(0, yaw, 0);
+    ph.activate(b);
+    ctx.blocks[key] = b;
+    return b;
+  };
+  ctx.place = place;
+  const queue = [...events].sort((a, b) => a[0] - b[0]);
+  let t = 0, step = 0, report = null, maxFloor = 0, floor = 0;
+  const peak = { bos: 0, torque: 0, friction: 0 };
+  const t0 = performance.now();
+  const dbg = [], res0 = {};
+  while (t < duration && !report) {
+    while (queue.length && queue[0][0] <= t) queue.shift()[1](ctx);
+    if (ctx.hold) ph.setHoldTarget(ctx.hold(t), FIXED_DT);
+    ph.step(FIXED_DT);
+    t += FIXED_DT;
+    if (++step % 2 === 0) {
+      const r = an.update(2 * FIXED_DT);
+      floor = r.floor;
+      maxFloor = Math.max(maxFloor, r.stableFloor);
+      for (const k in peak) peak[k] = Math.max(peak[k], r.ratios[k]);
+      if (DEBUG === name) {
+        const e = an.history[an.history.length - 1];
+        for (const k of ['bos', 'torque', 'friction']) if (e[k] && e[k].ratio > 1 && dbg.length < 40) {
+          const blk = [...ph.blocks].find(b => b.body.id === e[k].id);
+          dbg.push(`${t.toFixed(2)} ${k} r=${e[k].ratio.toFixed(2)} blk=${blk?.id}:${blk?.type} pts=${e[k].hull.length} e=${e[k].e?.toFixed(3)} s=${e[k].s?.toFixed(3)} still=${blk?.still.toFixed(2)} mem=${an.members.has(blk?.id)}`);
+        }
+        if (step % 24 === 0) dbg.push(`${t.toFixed(2)} members=${an.members.size} disp=${r.displaced} top=${r.top.toFixed(2)} | ` +
+          [...ph.blocks].map(b => `${b.id}${an.members.has(b.id) ? '*' : ''}(x${b.body.position.x.toFixed(2)} y${b.body.position.y.toFixed(2)} v${b.body.velocity.length().toFixed(2)} w${b.body.angularVelocity.length().toFixed(2)} s${b.still.toFixed(1)})`).join(' '));
+      }
+      if (r.report) report = r.report;
+    }
+  }
+  if (DEBUG === name) res0.dbg = dbg;
+  const res = { ...res0, name, t: +t.toFixed(2), ms: Math.round(performance.now() - t0), floor, maxFloor, members: an.members.size,
+    peak: Object.fromEntries(Object.entries(peak).map(([k, v]) => [k, +v.toFixed(2)])) };
+  if (report) {
+    const d = describeReport(report, '');
+    res.report = { key: report.key, mode: report.mode, before: +report.before.toFixed(2),
+      ratios: Object.fromEntries(Object.entries(report.ratios).map(([k, v]) => [k, +v.toFixed(2)])),
+      title: d.title, lines: d.lines.map(l => l.join(': ')).join(' | ') };
+  }
+  return res;
+}
+
+const C = 0.25, H = 0.5, GAP = 0.005;
+const lvl = (i) => C + i * H + GAP * (i + 1);
+const results = [];
+const DEBUG = new URLSearchParams(location.search).get('debug');
+try {
+  // 1) 곧게 6층: 무너지면 안 됨
+  results.push(run('stack6', 10, [0, 1, 2, 3, 4, 5].map(i => [i * 1.2, c => c.place('c' + i, 'cube', 0, lvl(i), 0)])));
+
+  // 2) 계단식으로 0.15m씩 쏠리게: 기저면 이탈(또는 돌림힘) 붕괴
+  results.push(run('stair', 14, [0, 1, 2, 3, 4, 5, 6].map(i => [i * 1.5, c => c.place('c' + i, 'cube', i * 0.15, lvl(i), 0)])));
+
+  // 3) 2층이 얼음인 탑을 손에 든 블록으로 옆에서 밀기: 마찰력 한계
+  results.push(run('ice-push', 9, [
+    [0, c => c.place('a', 'cube', 0, lvl(0))],
+    [0.8, c => c.place('ice', 'ice', 0, lvl(1))],
+    [1.6, c => c.place('b', 'cube', 0, lvl(2))],
+    [2.4, c => c.place('d', 'cube', 0, lvl(3))],
+    [4.5, c => { const b = c.place('hand', 'cube', -0.9, lvl(1)); c.ph.grab(b, b.body.position);
+                 c.hold = (t) => ({ x: -0.9 + (t - 4.5) * 0.8, y: lvl(1), z: 0 }); }],
+  ]));
+
+  // 4) 외팔보: 2층 위 널빤지, 왼쪽 균형추, 오른쪽 끝에 무거운 돌 → 돌림힘/기저면
+  results.push(run('cantilever', 10, [
+    [0, c => c.place('a', 'cube', 0, lvl(0))],
+    [0.8, c => c.place('b', 'cube', 0, lvl(1))],
+    [1.6, c => c.place('p', 'plank', 0.15, 1.0 + 0.125 + 0.02)],
+    [2.6, c => c.place('w', 'cube', -0.2, 1.25 + 0.25 + 0.02)],
+    [4.5, c => c.place('s', 'stone', 0.6, 1.25 + 0.2 + 0.3)],
+  ]));
+
+  // 5) 탑 중간(2층) 블록을 손으로 빼기: 지지 블록 제거
+  results.push(run('pull', 9, [
+    ...[0, 1, 2, 3].map(i => [i * 1.0, c => c.place('c' + i, 'cube', 0, lvl(i), 0)]),
+    [5.0, c => { const b = c.blocks.c1; c.an.noteGrab(b); c.ph.grab(b, b.body.position); c.hold = (t) => ({ x: (t - 5) * 3, y: lvl(1), z: 0 }); }],
+  ]));
+
+  // 6) 경사 블록 위 얼음 + 위에 정육면체: 얼음이 미끄러짐 → 마찰
+  results.push(run('ramp-ice', 9, [
+    [0, c => c.place('a', 'slab', 0, 0.15 + GAP)],
+    [0.8, c => c.place('r', 'ramp', 0, 0.3 + 0.2 + GAP)],
+    [1.8, c => c.place('c', 'cube', -0.15, 1.0)],
+    [3.5, c => c.place('i', 'ice', -0.1, 1.6)],
+  ]));
+  // 7) 부하 측정: 블록 32개 (4×4 두 층)
+  const grid = [];
+  for (let k = 0; k < 2; k++) for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    grid.push([k * 1.0 + (i * 4 + j) * 0.02, c => c.place(`g${k}${i}${j}`, 'cube', -0.84 + i * 0.56, lvl(k), -0.84 + j * 0.56)]);
+  }
+  results.push(run('stress32', 10, grid));
+} catch (e) {
+  results.push({ error: String(e), stack: e.stack });
+}
+document.getElementById('out').textContent = JSON.stringify(results, null, 1);
+document.title = 'DONE';
+</script>
+</body>
+</html>

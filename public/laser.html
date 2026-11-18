@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>레이저 챌린지 · Laser Challenge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/laser.css">
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <img id="cam" class="hidden" alt="">
+
+  <!-- 결과 카드 -->
+  <div id="result" class="hidden">
+    <div class="card">
+      <div id="r-badge"></div>
+      <div id="r-title"></div>
+      <div id="r-stars"></div>
+      <div id="r-score"></div>
+      <div id="r-detail"></div>
+      <div id="r-diag"></div>
+      <div id="r-name-row" class="hidden">
+        <span id="r-rank"></span>
+        <input id="r-name" maxlength="10" autocomplete="off" spellcheck="false" placeholder="이름">
+        <button id="r-save">저장</button>
+      </div>
+      <h3>🏆 오늘의 챔피언</h3>
+      <ol id="r-lb"></ol>
+      <div id="r-hint"></div>
+      <button id="r-again">처음 화면으로</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/laser/game.js"></script>
+  <script type="module">
+    // ?test=flow 처럼 test 파라미터가 있으면 같은 이름의 테스트 모듈을 불러와 실행 (tests/laser_<이름>.js)
+    const t = new URLSearchParams(location.search).get('test');
+    if (t) import(`/tests/laser_${t}.js`);
+  </script>
+</body>
+</html>

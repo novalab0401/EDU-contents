@@ -1,0 +1,7 @@
+# 설치하면 생기는 것
+.venv/
+__pycache__/
+models/*.task
+# 실행하면 생기는 것 (기록 DB, 로그, 오르벡 SDK 로그)
+data/
+Log/

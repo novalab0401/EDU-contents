@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>카오스 타워 · Chaos Tower</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three.module.js", "cannon-es": "/vendor/cannon-es.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="flash"></div>
+
+  <!-- HUD -->
+  <header id="hud">
+    <div id="brand">CHAOS TOWER<small>카오스 타워</small></div>
+    <div id="timer">2:00</div>
+    <div id="floors">
+      <div><span>현재</span><b id="floor-cur">0.0</b>층</div>
+      <div class="best"><span>최고</span><b id="floor-best">0.0</b>층</div>
+    </div>
+  </header>
+
+  <aside id="leaderboard">
+    <h3>명예의 전당 <small>TOP 4</small></h3>
+    <ol id="lb-list"></ol>
+    <button id="btn-data" class="mini-btn">데이터 보기</button>
+  </aside>
+
+  <section id="gauges">
+    <h4>실시간 안정성 <small>100% 넘으면 붕괴</small></h4>
+    <div id="gauge-list"></div>
+  </section>
+
+  <div id="hint"></div>
+  <div id="input-status"></div>
+  <img id="preview" alt="">
+  <div id="hand-cursor"></div>
+
+  <!-- 대기 화면 -->
+  <div id="title" class="overlay">
+    <h1>CHAOS TOWER</h1>
+    <p class="sub">2분 안에 블록을 가장 높이 쌓아라!</p>
+    <ul class="howto">
+      <li>좌우 받침대에 나타나는 블록을 <b>손으로 쥐어</b> 집고, 탑 위에서 <b>손을 펴서</b> 놓습니다.</li>
+      <li>탑이 무너지는 순간 시간이 멈추고 <b>공학 리포트</b>가 원인을 알려 줍니다 — 기저면 이탈 · 돌림힘 과부하 · 마찰력 한계.</li>
+      <li>2분 동안 가장 높이 쌓은 층수가 기록됩니다. TOP 4 안에 들면 명예의 전당에 이름을 남기세요.</li>
+    </ul>
+    <button id="btn-start" class="hand-btn big">게임 시작</button>
+  </div>
+
+  <div id="countdown" class="overlay"><span id="cd-num"></span><p id="cd-sub"></p></div>
+
+  <!-- 공학 붕괴 리포트 -->
+  <div id="report" class="panel">
+    <div class="rp-head">공학 붕괴 리포트</div>
+    <div id="rp-note"></div>
+    <h2 id="rp-title"></h2>
+    <div id="rp-en"></div>
+    <p id="rp-summary"></p>
+    <table id="rp-lines"></table>
+    <div id="rp-gauges"></div>
+    <p id="rp-tip"></p>
+    <button id="rp-continue" class="hand-btn">계속하기 <span></span></button>
+  </div>
+
+  <!-- 게임 종료 -->
+  <div id="gameover" class="overlay">
+    <h1 id="go-title"></h1>
+    <p id="go-floor"></p>
+    <p id="go-reason"></p>
+    <p id="go-msg"></p>
+    <button id="go-btn" class="hand-btn"></button>
+  </div>
+
+  <!-- 명예의 전당 이름 입력 -->
+  <div id="keypad" class="overlay">
+    <h2>명예의 전당 등록!</h2>
+    <p id="kp-floor"></p>
+    <div id="kp-name"></div>
+    <div id="kp-keys"></div>
+    <p id="kp-idle"></p>
+  </div>
+
+  <!-- 데이터 보기 (운영자용) -->
+  <div id="data-view" class="overlay">
+    <div class="dv-panel">
+      <div class="dv-head">
+        <h2>게임 데이터</h2>
+        <a class="mini-btn" href="/api/plays.csv">CSV 저장</a>
+        <button id="dv-close" class="mini-btn">닫기 (Esc)</button>
+      </div>
+      <div id="dv-summary"></div>
+      <div class="dv-table">
+        <table>
+          <thead><tr><th>번호</th><th>이름</th><th>최고 층</th><th>순위</th><th>최고 층 도달</th><th>붕괴</th><th>마지막 붕괴 원인</th><th>플레이 시각</th><th></th></tr></thead>
+          <tbody id="dv-body"></tbody>
+        </table>
+      </div>
+      <p class="dv-note">모든 게임이 기록됩니다 (명예의 전당에는 TOP 4만). 이름은 TOP 4에 들어 입력한 사람만 있습니다.
+        최고 층 도달 = 게임 시작 후 그 높이를 처음 쌓은 시간. 삭제하면 데이터와 명예의 전당에서 모두 지워집니다.</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

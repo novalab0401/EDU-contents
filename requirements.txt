@@ -1,0 +1,6 @@
+# 카오스 타워 서버 파이썬 패키지 (Python 3.9~3.13)
+# pyorbbecsdk2(오르벡 카메라)는 따로 --no-deps로 설치: 선언된 의존성(numpy<2, open3d, pygame 등)이
+# 필요 없고 mediapipe와 충돌하므로 → setup.sh 참고
+flask>=3.0
+pyyaml>=6.0
+mediapipe==1.2.0        # 손 인식 (numpy, opencv-contrib-python도 함께 설치됨)

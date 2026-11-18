@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>RUNNING</title>
+  <style>html, body { margin: 0; height: 100%; overflow: hidden; } iframe { border: 0; width: 100vw; height: 100vh; }</style>
+</head>
+<body>
+<iframe id="game" src="/?test"></iframe>
+<script>
+// 게임 흐름 테스트: 가상 손을 스크립트로 움직여 블록을 계단식으로 쌓아 붕괴 → 리포트 화면에서 멈춤.
+// ?stage=title | report | push | drop | keypad | result | data  (&clean: 명예의 전당을 비운 채로)
+const stage = new URLSearchParams(location.search).get('stage') || 'report';
+const frame = document.getElementById('game');
+const sleep = (s) => new Promise(r => setTimeout(r, s * 1000));
+frame.onload = async () => {
+  const w = frame.contentWindow;
+  while (!w.chaos) await sleep(0.1);
+  const { chaos } = w;
+  if (new URLSearchParams(location.search).has('clean')) {   // 문서용 스크린샷: 실제 기록(이름)을 가림
+    const render = chaos.ui.renderLeaderboard.bind(chaos.ui);
+    chaos.ui.renderLeaderboard = () => render([]);
+    render([]);
+    w.document.getElementById('btn-data').onclick = null;
+  }
+  const wait = async (s) => { chaos.advance(s); await sleep(0); };   // 게임 시간을 직접 진행
+  w.Math.random = () => 0.01;                         // 받침대 블록을 모두 정육면체로
+  const orig = chaos.ui.showReport.bind(chaos.ui);
+  chaos.ui.showReport = (d, r, s, cb) => orig(d, r, 999, cb);   // 리포트를 띄운 채 유지
+  const hand = { pos: new chaos.Vector3(0, 1, 0.4), grab: false, visible: true };
+  chaos.sensor.read = () => hand;
+  const moveTo = async (x, y, z, dur) => {
+    const a = hand.pos.clone(), n = Math.max(1, Math.round(dur / 0.02));
+    for (let i = 1; i <= n; i++) { hand.pos.set(a.x + (x - a.x) * i / n, a.y + (y - a.y) * i / n, a.z + (z - a.z) * i / n); await wait(0.02); }
+  };
+  const place = async (x, level) => {
+    const b = [...chaos.physics.blocks].find(b => !b.inWorld && b.mesh.position.x < 0);
+    const p = b.body.position;
+    await moveTo(p.x, p.y, p.z, 0.5);
+    hand.grab = true; await wait(0.15);
+    const y = 0.25 + 0.5 * level + 0.04;
+    await moveTo(x, y + 0.4, 0, 0.7);
+    await moveTo(x, y, 0, 0.3);
+    await wait(0.2);
+    hand.grab = false;
+    await wait(1.3);
+  };
+  const put = (type, x, y) => {                       // 손을 거치지 않고 바로 놓기 (상황 준비용)
+    const b = chaos.physics.createBlock(type);
+    b.body.position.set(x, y, 0);
+    chaos.physics.activate(b);
+    return b;
+  };
+  if (stage === 'title') {                            // 대기 화면
+    chaos.live();
+    await sleep(2);
+    document.title = 'DONE title';
+    return;
+  }
+  if (stage === 'data') {                             // 데이터 보기 화면
+    frame.contentDocument.getElementById('btn-data').click();
+    await sleep(1);
+    chaos.live();
+    await sleep(1);
+    document.title = 'DONE data';
+    return;
+  }
+  chaos.startGame();
+  await wait(4.2);
+  if (stage === 'push') {
+    // 2층이 얼음인 탑을 손에 든 블록으로 밀기 → 마찰력 한계
+    put('cube', 0, 0.255); await wait(0.8);
+    put('ice', 0, 0.76); await wait(0.8);
+    put('cube', 0, 1.265); await wait(0.8);
+    put('cube', 0, 1.77); await wait(2.0);
+    const b = [...chaos.physics.blocks].find(b => !b.inWorld && b.mesh.position.x < 0);
+    await moveTo(b.body.position.x, b.body.position.y, b.body.position.z, 0.5);
+    hand.grab = true; await wait(0.15);
+    await moveTo(-1.0, 0.76, 0, 0.8);
+    await moveTo(0.2, 0.76, 0, 1.5);
+    await wait(0.5);
+  } else if (stage === 'drop') {
+    // 널빤지 끝에 무거운 돌을 떨어뜨리기 → 돌림힘(충격)
+    put('cube', 0, 0.255); await wait(0.8);
+    put('cube', 0, 0.76); await wait(0.8);
+    put('plank', 0.15, 1.145); await wait(1.0);
+    put('cube', -0.2, 1.52); await wait(1.8);
+    const s = put('stone', 0.6, 1.75);
+    await wait(1.5);
+  }
+  if (stage === 'push' || stage === 'drop') {
+    await wait(1.5);
+  } else if (stage === 'report') {
+    for (const [i, x] of [0, 0.15, 0.3, 0.45, 0.6].entries()) { await place(x, i); if (chaos.state === 'report') break; }
+    await wait(1.5);                                  // 되감기 → 화살표·팝업
+  } else {
+    for (let i = 0; i < 4; i++) await place(0, i);
+    await wait(1.5);
+    chaos.endGame();
+    await sleep(4);                                   // 결과 확인(2.5초) → 키패드
+    if (stage === 'result') {
+      const doc = frame.contentDocument;
+      for (const k of ['T', 'E', 'S', 'T', 'OK']) { doc.querySelector(`#kp-keys [data-k="${k}"]`).click(); await sleep(0.1); }
+      await sleep(1);
+    }
+  }
+  chaos.live();                                       // 마지막 화면은 자동 루프(rAF)로 그리게
+  await sleep(1.5);
+  const c = chaos.camera.position;
+  document.title = `DONE ${chaos.state} cam=${c.x.toFixed(2)},${c.y.toFixed(2)},${c.z.toFixed(2)} best=${chaos.best}`;
+  const out = document.createElement('pre');
+  out.id = 'result'; out.style.display = 'none'; out.textContent = document.title;
+  document.body.append(out);
+};
+</script>
+</body>
+</html>

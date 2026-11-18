@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>레이저 챌린지 · 데이터 보기</title>
+  <link rel="icon" href="data:,">
+  <style>
+    body { margin: 0; padding: 24px; background: #070d1c; color: #e8f6ff; font: 15px/1.5 "Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif; }
+    h1 { margin: 0 0 4px; font-size: 24px; color: #4cf0ff; } .sum { color: #9fb4d8; margin-bottom: 14px; }
+    a.btn, button { display: inline-block; padding: 7px 14px; margin-right: 8px; font: inherit; font-weight: 700; color: #06101f; background: #4cf0ff; border: 0; border-radius: 8px; cursor: pointer; text-decoration: none; }
+    button.del { padding: 3px 10px; background: #3a2230; color: #ff9bb0; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; } th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid #1b2a4a; }
+    th { color: #ffd23f; position: sticky; top: 0; background: #070d1c; } td.n { text-align: right; } .ok { color: #5dff9d; } .stars { color: #ffd23f; }
+  </style>
+</head>
+<body>
+  <h1>레이저 챌린지 · 데이터 보기</h1>
+  <div class="sum" id="sum">불러오는 중…</div>
+  <a class="btn" href="/api/laser/plays.csv">CSV 내려받기 (엑셀)</a><button onclick="load()">새로고침</button><a class="btn" href="/laser" style="background:#1a2a4a;color:#cfe3ff">게임으로</a>
+  <table>
+    <thead><tr><th>#</th><th>시각</th><th>이름</th><th>미션</th><th class="n">점수</th><th>별</th><th>타깃</th><th class="n">발사</th><th class="n">남은 시간</th><th>입력</th><th class="n">로그</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <script>
+    async function load() {
+      const d = await (await fetch('/api/laser/plays')).json();
+      document.getElementById('sum').textContent = `전체 ${d.total}판 · 클리어 ${d.cleared}판 · 최고 점수 ${d.best.toLocaleString('ko-KR')}`;
+      const tb = document.getElementById('rows'); tb.innerHTML = '';
+      for (const p of d.plays) {
+        const tr = document.createElement('tr');
+        const cells = [p.id, p.created_at, p.player_name || '', 'M' + p.mission, p.score.toLocaleString('ko-KR'), '★'.repeat(p.stars), `${p.targets}/${p.total_targets}`, p.shots, p.time_left ?? '', p.input_source || '', p.event_count];
+        cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c; if ([4, 7, 8, 10].includes(i)) td.className = 'n'; if (i === 5) td.className = 'stars'; if (i === 6 && p.cleared) td.className = 'ok'; tr.appendChild(td); });
+        const td = document.createElement('td'); const b = document.createElement('button'); b.className = 'del'; b.textContent = '삭제';
+        b.onclick = async () => { if (confirm(`#${p.id} 기록을 삭제할까요?`)) { await fetch('/api/laser/plays/' + p.id, { method: 'DELETE' }); load(); } };
+        td.appendChild(b); tr.appendChild(td); tb.appendChild(tr);
+      }
+    }
+    load();
+  </script>
+</body>
+</html>
