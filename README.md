@@ -7,12 +7,16 @@
 | `laser-challenge` | **레이저 챌린지** (LASER CHALLENGE) | 손을 거울처럼 기울여 레이저를 순서대로 맞히는 반사 원리 게임. **발사 모드**와 **라이브 모드** 두 가지 → [docs/LASER_CHALLENGE.md](docs/LASER_CHALLENGE.md) |
 | `chaos-tower` (예정) | 카오스 타워 | 손으로 3D 블록을 쌓는 구조 안정성 게임 |
 
-**바로 실행** (일반 PC · 노트북, 카메라가 없어도 마우스·키보드로 됩니다):
+**바로 실행** (일반 PC · 노트북 · 웹캠. 손 인식은 크롬 안에서 돌아서 opencv 설치가 필요 없습니다):
 
 ```
-pip install -r requirements.txt
-python server.py          # → 브라우저에서 http://localhost:8001/laser   (L 키: 라이브 모드)
+git clone -b laser-challenge https://github.com/novalab0401/EDU-contents
+cd EDU-contents
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-lite.txt     # 맥·리눅스: .venv/bin/pip install -r requirements-lite.txt
+.venv\Scripts\python server.py --no-camera                       # 맥·리눅스: .venv/bin/python server.py --no-camera
 ```
+크롬에서 `http://localhost:8001/laser` → 카메라 허용. **Enter** = 기본(MISSION 04), **L** = 라이브 모드, **3·5** = 난이도, **V** = 손 인식 화면.
 
 자세한 설치·운영자 키·현장 점검은 [docs/LASER_CHALLENGE.md](docs/LASER_CHALLENGE.md) 를 보세요.
 아래는 이 코드가 함께 쓰는 공통 서버·카메라 설명과, 같은 코드에 들어 있는 카오스 타워 설명입니다.

@@ -7,12 +7,18 @@ import csv
 import datetime
 import io
 import json
+import mimetypes
 import os
 import sqlite3
 import time
 
 import yaml
 from flask import Flask, Response, abort, jsonify, request, send_from_directory
+
+# 윈도우는 레지스트리 때문에 .js/.wasm 의 형식이 잘못 나올 수 있어서(모듈 스크립트·WASM이 안 열림) 직접 지정
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("application/wasm", ".wasm")
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(ROOT, "public")
@@ -134,6 +140,12 @@ def laser_page():
 @app.get("/src/<path:path>")
 def src(path):
     return send_from_directory(SRC, path, max_age=0)
+
+
+@app.get("/models/<path:path>")
+def models(path):
+    # 브라우저 손 인식이 모델을 여기서 받아 감 (없으면 인터넷에서)
+    return send_from_directory(os.path.join(ROOT, "models"), path, max_age=0)
 
 
 @app.get("/tests/<path:path>")

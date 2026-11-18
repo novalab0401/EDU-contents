@@ -1,11 +1,12 @@
 // 레이저 챌린지: 상태 흐름 · 점수 · 진단 · 그리기 연결.
-//   title(대기·데모) → tutorial(MISSION 01) → tutorial_clear → brief(카운트다운) → play(MISSION 03 …)
+//   title(대기·데모) → tutorial(MISSION 01) → tutorial_clear → brief(카운트다운) → play(MISSION 04 …)
 //     → celebrate(성공) | review(실패: 정답 예시·처방) → card(결과·오늘의 챔피언) → title
 import { LEVELS, levelById, cloneScene, SNAP, COLORS, W, H } from './levels.js';
 import { trace, evaluate, lineDiff, norm180 } from './optics.js';
 import { withAngles, diagnose, diagnosisText } from './solver.js';
 import { LaserInput } from './input.js';
 import { Sfx } from './audio.js';
+import { WebHand } from './webhand.js';
 import * as R_ from './render.js';
 
 const { txt, panel, roundRect, drawBackground, drawObstacles, drawEmitter, drawMirror, drawTarget, drawPath, drawPrinciple, drawParticles, CYAN } = R_;
@@ -13,13 +14,16 @@ const { txt, panel, roundRect, drawBackground, drawObstacles, drawEmitter, drawM
 const Q = new URLSearchParams(location.search);
 const MANUAL = Q.has('manual');            // 테스트: 시간을 직접 진행 (laser.advance)
 const NO_HAND = Q.has('nohand') || MANUAL; // 손 인식 스트림에 연결하지 않음
+// 손 인식은 기본적으로 브라우저 안에서 (웹캠 + MediaPipe WASM, 설치·opencv 불필요). ?server 를 붙이면 파이썬 서버(/hand, 오르벡 깊이 카메라)를 씀
+const BROWSER_HAND = !NO_HAND && !Q.has('server') && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 const BEAM_SPEED = 2600;                   // 레이저가 나아가는 속도 (px/s) — 눈으로 따라갈 수 있는 빠르기
 const SHOT_HOLD = 0.6;                     // 레이저가 끝까지 간 뒤 잠깐 머무는 시간
 const BRIEF_SEC = 4.0, CLEAR_SEC = 1.8, CELEBRATE_SEC = 2.6, REVIEW_SEC = 7.0, CARD_IDLE_SEC = 25;
 const TUTORIAL_MAX_SEC = 90;               // 튜토리얼이 너무 길어지면 자동으로 넘어감
 const HAND_START_SEC = 1.0;                // 대기 화면에서 손이 이만큼 계속 보이면 시작
 const LOST_BANNER_SEC = 1.2;
-const LIVE_HOLD = 0.5;                     // 라이브 모드: 세 타깃을 한 빔으로 이만큼 계속 맞히면 클리어
+const LIVE_HOLD = 0.5;                     // 라이브 모드: 모든 타깃을 한 빔으로 이만큼 계속 맞히면 클리어
+const DEFAULT_PLAN = [1, 4];               // 기본(Enter·손으로 시작): 튜토리얼 → MISSION 04. 3·5 키로 다른 난이도
 const LIVE_MISSION_OFFSET = 10;            // 라이브 기록은 mission 번호 +10 (순위표를 발사 모드와 분리)
 const NAME_WORDS = [['반짝이는', '번쩍이는', '똑똑한', '용감한', '날쌘', '빛나는', '재빠른'], ['거울', '레이저', '프리즘', '별빛', '광선', '탐험가']];
 
@@ -29,13 +33,20 @@ const ctx = canvas.getContext('2d');
 const sfx = new Sfx();
 
 const G = {
-  state: 'title', t: 0, clock: 0, plan: [1, 3], planIdx: 0, live: false,
+  state: 'title', t: 0, clock: 0, plan: DEFAULT_PLAN, planIdx: 0, live: false,
   handHold: 0, needClear: false, board: [], boardDate: '', demo: null, lostT: 0, cardIdle: 0, camOn: false, server: { ok: null },
 };
 let R = null;                              // 지금 하는 미션
 const clock = () => G.clock;
-const input = new LaserInput({ useHand: !NO_HAND, clock, onFire: (f) => fireNow(f) });
+const input = new LaserInput({ useHand: !NO_HAND && !BROWSER_HAND, clock, onFire: (f) => fireNow(f) });
 input.bind(canvas);
+let webhand = null;
+G.cam = { state: BROWSER_HAND ? 'loading' : 'idle', msg: BROWSER_HAND ? '카메라 준비 중…' : '' };
+if (BROWSER_HAND) {
+  webhand = new WebHand({ onData: (s) => input.onData(s), onStatus: (st) => { G.cam = st; } });
+  // 브라우저 카메라가 안 되면(권한·카메라 없음·http 주소) 파이썬 서버의 손 인식(/hand)을 시도 — 젯슨·오르벡 구성
+  webhand.start().catch(() => { try { input._connect(); } catch { /* 마우스·키보드로 진행 */ } });
+}
 
 // ───────────────────────── 기록(이벤트 로그) ─────────────────────────
 function log(type, data = {}) {
@@ -118,7 +129,7 @@ function newRun(level) {
   syncMirrors();
 }
 
-function start(plan = [1, 3], opts = {}) {
+function start(plan = DEFAULT_PLAN, opts = {}) {
   G.plan = plan; G.planIdx = 0; G.handHold = 0; G.live = !!opts.live;
   beginMission(plan[0]);
 }
@@ -167,7 +178,7 @@ const fireCallbacks = {
       log('TARGET_HIT', { shot: R.fire.shot, id: e.id, order: e.order, x: Math.round(e.x), y: Math.round(e.y) });
     } else {
       R.wrong[e.id] = 1; sfx.wrong();
-      R.msg = { text: '순서가 달라요! 빨강 → 노랑 → 파랑 순서로 맞혀야 해요', t: 2.6 };
+      R.msg = { text: `순서가 달라요! ${R.level.targetsText || '표시된 번호 순서'}로 맞혀야 해요`, t: 2.6 };
       log('TARGET_WRONG_ORDER', { shot: R.fire.shot, id: e.id, expected: e.expected });
     }
   },
@@ -230,7 +241,7 @@ async function api(path, opts) {
     return await r.json();
   } catch { G.server.ok = false; return null; }
 }
-async function refreshBoard(mission = 3) {
+async function refreshBoard(mission = DEFAULT_PLAN[DEFAULT_PLAN.length - 1]) {
   const d = await api(`/api/laser/leaderboard?mission=${mission}`);
   if (d) { G.board = d.top || []; G.boardDate = d.date || ''; }
 }
@@ -346,7 +357,7 @@ function updateLive(dt) {
   R.wrongHold = wrong.length ? R.wrongHold + dt : 0;
   for (const e of wrong) R.wrong[e.id] = Math.max(R.wrong[e.id] || 0, 0.6);
   if (R.wrongHold > 1.2 && !R.msg) {                    // 훑고 지나가는 건 말없이, 오래 그러고 있으면 알려 줌
-    R.msg = { text: '순서가 달라요! 빨강 → 노랑 → 파랑 순서로 지나가야 해요', t: 2.4 };
+    R.msg = { text: `순서가 달라요! ${R.level.targetsText || '표시된 번호 순서'}로 지나가야 해요`, t: 2.4 };
     log('TARGET_WRONG_ORDER', { live: true, id: wrong[0].id, expected: wrong[0].expected });
     R.wrongHold = 0;
   }
@@ -363,7 +374,7 @@ function step(dt, draw = true) {
       updateDemo(dt);
       if (input.handsVisible === 0) G.needClear = false;
       G.handHold = input.handsVisible > 0 && !G.needClear ? G.handHold + dt : 0;
-      if (G.handHold >= HAND_START_SEC) start([1, 3]);
+      if (G.handHold >= HAND_START_SEC) start();
       break;
     }
     case 'tutorial': {
@@ -376,7 +387,7 @@ function step(dt, draw = true) {
     }
     case 'tutorial_clear': {
       updateMissionCommon(dt);
-      if (G.t >= CLEAR_SEC) { G.planIdx++; beginMission(G.plan[G.planIdx] ?? 3); }
+      if (G.t >= CLEAR_SEC) { G.planIdx++; beginMission(G.plan[G.planIdx] ?? DEFAULT_PLAN[DEFAULT_PLAN.length - 1]); }
       break;
     }
     case 'brief': {
@@ -467,6 +478,12 @@ function renderTitle() {
   panel(ctx, 330, 596, 620, 88, { fill: 'rgba(5,9,20,0.85)', stroke: `rgba(93,255,157,${0.3 + pulse * 0.5})` });
   txt(ctx, hand ? '✋ 카메라 앞에 손을 들어 보세요' : '▶ Enter 키를 눌러 시작', W / 2, 628, { size: 34, color: '#5dff9d', alpha: 0.6 + pulse * 0.4 });
   txt(ctx, hand ? (G.handHold > 0 ? `시작하는 중… ${Math.round(Math.min(1, G.handHold / HAND_START_SEC) * 100)}%` : '손가락 방향이 거울 방향 · 주먹을 쥐면 발사') : '(손 인식이 꺼져 있어요: 마우스 휠·←→ 로 각도, 클릭·Space 로 발사)', W / 2, 664, { size: 19, color: '#9fb4d8', weight: '500' });
+  // 카메라 상태 (왼쪽 아래 작게): 준비 중 / 연결됨 / 오류 이유
+  if (BROWSER_HAND && G.cam) {
+    const cs = G.cam, ok = cs.state === 'ok', viaServer = cs.state === 'error' && input.available;   // 브라우저 카메라가 안 돼도 서버 손 인식이 되면 그걸로
+    const label = viaServer ? `📷 서버 카메라로 연결됨 · 손 ${input.handsVisible}개` : ok ? `📷 카메라 연결됨 · 손 ${input.handsVisible}개${cs.fps ? ` · ${cs.fps}fps` : ''}   (V: 손 인식 화면)` : `📷 ${cs.msg || '카메라 준비 중…'}${cs.state === 'error' ? '  → 마우스·키보드로 할 수 있어요' : ''}`;
+    txt(ctx, label, 24, 704, { size: 17, align: 'left', color: ok || viaServer ? '#5dff9d' : cs.state === 'error' ? '#ff9bb0' : '#9fb4d8', weight: '500' });
+  }
   // 오늘의 챔피언 (오른쪽 빈 공간)
   panel(ctx, 1010, 130, 256, 290, { fill: 'rgba(5,9,20,0.8)' });
   txt(ctx, '🏆 오늘의 챔피언', 1138, 160, { size: 22, color: '#ffd23f' });
@@ -629,6 +646,7 @@ function render() {
 
 // ───────────────────────── 운영자 키 · 기타 ─────────────────────────
 function toggleCam() {
+  if (webhand && webhand.running) { G.camOn = webhand.togglePreview(); return; }   // 브라우저 손 인식: 카메라 화면 + 관절 + 각도 미리보기
   G.camOn = !G.camOn;
   const img = $('cam');
   img.classList.toggle('hidden', !G.camOn);
@@ -642,12 +660,15 @@ window.addEventListener('keydown', (e) => {
   }
   switch (e.code) {
     case 'Enter':
-      if (G.state === 'title') start([1, 3]);
+      if (G.state === 'title') start();
       else if (G.state === 'card') toTitle();
       else if (G.state === 'review') enterCard();
       break;
     case 'Digit2': if (G.state === 'title') start([1, 2]); break;       // 쉬운 모드: 튜토리얼 → MISSION 02
-    case 'KeyL': if (G.state === 'title') start([1, 3], { live: true }); break;   // 라이브 모드: 레이저 상시 ON, 한 줄기 빔으로 세 타깃
+    case 'Digit3': if (G.state === 'title') start([1, 3]); break;       // 보통: MISSION 03 (타깃 3개)
+    case 'Digit4': if (G.state === 'title') start([1, 4]); break;       // 기본: MISSION 04 (타깃 4개)
+    case 'Digit5': if (G.state === 'title') start([1, 5]); break;       // 어려움: MISSION 05 (타깃 5개, 거울 7개)
+    case 'KeyL': if (G.state === 'title') start(DEFAULT_PLAN, { live: true }); break;   // 라이브 모드: 레이저 상시 ON, 한 줄기 빔으로 모든 타깃
     case 'KeyN':                                                         // 건너뛰기
       if (G.state === 'tutorial' && R && !R.ended) endMission(true, 'skip');
       else if (G.state === 'brief') G.t = BRIEF_SEC;
@@ -660,7 +681,7 @@ window.addEventListener('keydown', (e) => {
     default: break;
   }
 });
-canvas.addEventListener('pointerdown', () => { sfx.unlock(); if (G.state === 'title') start([1, 3]); });
+canvas.addEventListener('pointerdown', () => { sfx.unlock(); if (G.state === 'title') start(); });
 $('r-save').addEventListener('click', saveName);
 $('result').addEventListener('click', (e) => { if (e.target.id === 'result') toTitle(); });
 $('r-again').addEventListener('click', toTitle);

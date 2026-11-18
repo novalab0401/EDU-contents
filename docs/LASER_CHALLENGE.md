@@ -5,25 +5,37 @@
 
 ## 1. 실행 (일반 PC · 노트북)
 
-설치는 README의 "설치" 그대로입니다 (윈도우: PowerShell 설치, 맥/리눅스: `./setup.sh`). 손 인식 모델 파일(`models/hand_landmarker.task`)도 같은 것을 씁니다.
+**손 인식은 크롬 안에서 돌아갑니다** (웹캠 + MediaPipe WASM). 파이썬 서버는 기록·순위표만 맡아서 설치가 간단하고, 윈도우 보안 정책(스마트 앱 컨트롤 등)이 파이썬 opencv DLL을 막는 PC에서도 됩니다.
 
 ```powershell
-# 윈도우
-.venv\Scripts\python server.py                 # 카메라 없이: --no-camera
+# 윈도우 (PowerShell 또는 명령 프롬프트). Python 3.9 이상 아무 버전이나 됨
+git clone -b laser-challenge https://github.com/novalab0401/EDU-contents
+cd EDU-contents
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-lite.txt
+.venv\Scripts\python server.py --no-camera
+```
+```bash
 # 맥 · 리눅스
-./run.sh                                        # 카메라 없이: ./run.sh --no-camera
+python3 -m venv .venv && .venv/bin/pip install -r requirements-lite.txt && .venv/bin/python server.py --no-camera
 ```
 
-- 게임: **http://localhost:8001/laser** (카오스 타워는 그대로 `/`)
+- 게임: 크롬에서 **http://localhost:8001/laser** → 카메라 **허용** (한 번만). `localhost`로 열어야 브라우저 카메라가 켜집니다 (다른 PC에서 `http://192.168...` 로 열면 막힘).
+- 손 인식 화면: 게임 화면에서 **V 키** (카메라 영상 + 관절 + 거울 각도 `deg` + 쥠 여부). 왼쪽 아래 상태 줄에 "카메라 연결됨 · 손 N개 · fps"가 보입니다.
+- 손 인식 모델: `models/hand_landmarker.task` 가 있으면 그걸 쓰고(인터넷 없는 전시장용), 없으면 인터넷에서 받아 옵니다. 미리 받아 두려면:
+  ```powershell
+  mkdir models
+  curl.exe -L -o models\hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+  ```
+  (파일 크기가 약 7MB여야 합니다. 수백 바이트면 오류 페이지가 저장된 것 → 다시 받기)
 - 데이터 보기: `/laser-data.html` · CSV: `/api/laser/plays.csv`
-- 손 인식 미리보기: 게임 화면에서 **V 키** (관절, 거울 각도(deg)가 같이 보임)
-- **전시용 전체 화면**: 윈도우 `laser_windows.bat` (더블클릭) / 맥·리눅스 `./laser_kiosk.sh`. 크롬을 `--kiosk --autoplay-policy=no-user-gesture-required` 로 열어서 클릭 없이도 효과음이 납니다 (이 옵션이 없으면 키를 한 번 눌러야 소리가 남).
-
-카메라는 오르벡 Gemini 335를 먼저 찾고, 없으면 **일반 웹캠으로 자동 대체**합니다(깊이 없음, 이 게임에는 영향 없음 — 거울 각도는 손 모양에서 나옴). `config.yaml`의 `camera.webcam_fallback`, `camera.webcam_index`. 카메라가 하나도 없으면 마우스·키보드로 플레이됩니다.
+- **전시용 전체 화면**: 윈도우 `laser_windows.bat` (더블클릭) / 맥·리눅스 `./laser_kiosk.sh`. 크롬을 `--kiosk --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream` 으로 열어서 클릭 없이도 효과음이 나고 카메라 허용 팝업도 안 뜹니다.
+- 카메라는 브라우저가 잡습니다. 다른 프로그램(카메라 앱·화상회의)이 카메라를 쓰고 있으면 "다른 프로그램이 카메라를 쓰고 있어요"가 뜹니다. 서버를 `--no-camera` 없이 켜면 파이썬이 카메라를 먼저 잡을 수 있으니 PC에서는 항상 `--no-camera`.
+- **젯슨·오르벡 깊이 카메라**(예전 방식): 주소 뒤에 `?server` 를 붙이면 파이썬 서버의 손 인식(`/hand`)을 씁니다. 브라우저 카메라가 안 될 때(권한·카메라 없음·http 주소)도 자동으로 서버 손 인식을 시도합니다. 카메라가 하나도 없으면 마우스·키보드로 플레이됩니다.
 
 ## 2. 플레이 흐름
 
-`대기 화면(스스로 푸는 데모)` → 손이 1초 보이면 시작 → **MISSION 01 튜토리얼** (거울 1개, 입사각·반사각 표시) → **MISSION 03** (45초 · 5발) → 결과 → 오늘의 챔피언
+`대기 화면(스스로 푸는 데모)` → 손이 1초 보이면 시작 → **MISSION 01 튜토리얼** (거울 1개, 입사각·반사각 표시) → **MISSION 04 「빛의 미로」** (타깃 4개, 거울 5개, 60초 · 6발) → 결과 → 오늘의 챔피언
 
 | 입력 | 손 (카메라) | 키보드·마우스 (예비) |
 |---|---|---|
@@ -38,12 +50,15 @@
 | 키 | 동작 |
 |---|---|
 | Enter | 시작 (대기 화면) / 처음 화면으로 (결과 화면) / 결과로 넘기기 (처방 화면) |
-| 2 | **쉬운 모드**로 시작 (튜토리얼 → MISSION 02: 두 거울, 60초 · 6발) |
-| L | **라이브 모드**로 시작 (튜토리얼 → MISSION 03, 레이저 상시 ON) — 아래 "두 가지 방식" 참고 |
+| 2 | **쉬움**: 튜토리얼 → MISSION 02 (두 거울, 타깃 2개, 60초 · 6발) |
+| 3 | **보통**: 튜토리얼 → MISSION 03 (타깃 3개, 45초 · 5발) |
+| 4 | **기본**(Enter와 같음): 튜토리얼 → MISSION 04 (타깃 4개, 거울 5개, 60초 · 6발) — 정답이 5° 격자에서 딱 1가지 |
+| 5 | **어려움**: 튜토리얼 → MISSION 05 「광학 마스터」 (타깃 5개, 거울 7개, 75초 · 6발) — 정답 1가지 |
+| L | **라이브 모드**로 시작 (튜토리얼 → MISSION 04, 레이저 상시 ON) — 아래 "두 가지 방식" 참고 |
 | N | 튜토리얼 · 카운트다운 건너뛰기 |
 | R | 지금 미션 다시 시작 |
 | Esc | 처음 화면으로 |
-| V · M · F | 손 인식 미리보기 · 소리 끄기 · 전체 화면 |
+| V · M · F | 손 인식 화면(카메라 + 관절 + 각도) · 소리 끄기 · 전체 화면 |
 
 결과 화면에서 오늘 TOP 5에 들면 이름칸이 뜨고 이름이 **미리 채워져** 있습니다(아이가 안 쳐도 됨). Enter로 저장하거나, 그냥 두면 약 18초 뒤 자동 저장 후 처음 화면으로 갑니다. 손을 든 채로 처음 화면에 돌아와도, 손이 한 번 사라져야 다음 게임이 시작됩니다.
 
@@ -90,16 +105,17 @@
 ## 7. 테스트
 
 ```bash
-node tests/laser_unit.mjs              # 광학 엔진 · 레벨 해 존재 · 풀이기 (47개)
+node tests/laser_unit.mjs              # 광학 엔진 · 레벨 해 존재(정답 1~3가지) · 풀이기 (59개)
 node tests/laser_input_test.mjs        # 손 기울기→각도, 주먹→발사, 떨림·경계·손 놓침 (27개)
+node tests/laser_handmath_test.mjs     # 브라우저 손 인식 계산: 각도·펴짐 비율·쥠 히스테리시스·메시지 호환 (27개)
 python tests/hand_hands_test.py        # 서버 hands 목록: 두 손 정렬·각도·손별 주먹 (가짜 카메라·가짜 인식기)
 python tests/laser_server_test.py      # 기록·순위·오늘의 챔피언 API (임시 DB)
-# 브라우저 전체 흐름 (서버를 켠 뒤): http://localhost:8001/laser.html?manual&test=flow  → 화면에 결과, 제목이 "DONE 통과/실패"
+# 브라우저 전체 흐름 (서버를 켠 뒤): http://localhost:8001/laser.html?manual&test=flow  → 화면에 결과, 제목이 "DONE 통과/실패" (98개)
 ```
 (흐름 테스트는 서버에 테스트 기록을 남기니, 전시 전에 위 4번대로 지우세요.)
 
 ## 8. 알려진 한계 · 확인이 필요한 것
 
-- **실제 카메라 + MediaPipe 손 인식으로는 아직 돌려 보지 못했습니다.** 손 인식 부분은 가짜 랜드마크로 검증했고, 게임·입력·서버는 자동 테스트로 검증했습니다. 현장 점검(5번)에서 각도 숫자와 주먹 인식을 꼭 확인하세요.
+- **실제 손 모델로 손을 인식하는 것은 아직 확인하지 못했습니다.** 브라우저 쪽은 가짜 카메라로 카메라 연결 · 라이브러리 로딩 · 인식 엔진 초기화까지, 계산은 가짜 손 데이터로 검증했습니다. 처음 켜면 **V 키**로 각도(`deg`)·주먹 인식을 꼭 확인하세요. 주먹 기준은 `src/laser/handmath.js` 의 `GRAB_CLOSE`/`GRAB_OPEN`, 손 움직임 범위는 `NX_GAIN`.
 - 윈도우·맥 실행 스크립트(`laser_windows.bat`, `laser_kiosk.sh`)는 이 환경에서 실행해 보지 못했습니다. 크롬 경로가 다르면 고치세요.
 - 두 손을 동시에 쓸 때 서로 겹치거나 한 손이 화면 밖이면 한 손으로 처리됩니다 (한 손 규칙으로 계속 플레이 가능).

@@ -7,7 +7,7 @@
 // 고정 거울(kind:'fixed')은 움직이지 않는다.
 export const W = 1280, H = 720;
 export const SNAP = 5;                       // 손 거울 각도 단위 (도)
-export const COLORS = { red: '#ff4d6d', yellow: '#ffd23f', blue: '#4dabff' };
+export const COLORS = { red: '#ff4d6d', yellow: '#ffd23f', blue: '#4dabff', green: '#5dff9d', orange: '#ff9f43' };
 const HAND_LEN = 150, FIXED_LEN = 130;
 
 const hand = (id, x, y, angle) => ({ id, kind: 'hand', x, y, len: HAND_LEN, angle });
@@ -49,6 +49,30 @@ export const LEVELS = [
       mirrors: [hand('H1', 380, 360, 90), hand('H2', 900, 142, 0), fixed('F1', 640, 142, 20), fixed('F2', 900, 520, 45)],
       obstacles: [{ x: 570, y: 270, w: 40, h: 450 }],
       targets: [target('T1', 0, 'red', 510, 251), target('T2', 1, 'yellow', 770, 142), target('T3', 2, 'blue', 900, 316)],
+    },
+  },
+  {
+    id: 4, name: 'MISSION 04', title: '빛의 미로', tutorial: false,
+    desc: '거울 다섯 개를 지나는 한 줄기 빛으로 네 타깃을 순서대로', targetsText: '빨강 → 노랑 → 파랑 → 초록 순서대로',
+    timeLimit: 60, maxShots: 6, previewSegs: 2,
+    solution: { H1: 150, H2: 125 },
+    scene: {
+      W, H, emitter: { x: 60, y: 260, angle: 0 },
+      mirrors: [hand('H1', 282, 260, 90), fixed('F1', 454, 558, 5), fixed('F2', 571, 237, 35), hand('H2', 937, 237, 0), fixed('F3', 835, 517, 125)],
+      obstacles: [{ x: 625, y: 371, w: 36, h: 164 }, { x: 725, y: 596, w: 208, h: 36 }],
+      targets: [target('T1', 0, 'red', 368, 409, 34), target('T2', 1, 'yellow', 754, 237, 34), target('T3', 2, 'blue', 886, 377, 34), target('T4', 3, 'green', 1058, 517, 34)],
+    },
+  },
+  {
+    id: 5, name: 'MISSION 05', title: '광학 마스터', tutorial: false,
+    desc: '일곱 개의 거울을 지나는 긴 경로로 다섯 타깃을 순서대로', targetsText: '빨강 → 노랑 → 파랑 → 초록 → 주황 순서대로',
+    timeLimit: 75, maxShots: 6, previewSegs: 2,
+    solution: { H1: 30, H2: 40 },
+    scene: {
+      W, H, emitter: { x: 60, y: 402, angle: 0 },
+      mirrors: [hand('H1', 270, 402, 90), fixed('F1', 380, 212, 170), fixed('F2', 437, 539, 135), fixed('F3', 661, 579, 45), hand('H2', 594, 201, 0), fixed('F4', 929, 322, 130), fixed('F5', 966, 533, 130)],
+      obstacles: [{ x: 786, y: 372, w: 36, h: 284 }, { x: 288, y: 614, w: 192, h: 36 }],
+      targets: [target('T1', 0, 'red', 325, 307, 30), target('T2', 1, 'yellow', 549, 559, 30), target('T3', 2, 'blue', 762, 262, 30), target('T4', 3, 'green', 948, 428, 30), target('T5', 4, 'orange', 1123, 591, 30)],
     },
   },
 ];
